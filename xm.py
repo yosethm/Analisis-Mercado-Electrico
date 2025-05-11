@@ -66,10 +66,12 @@ if usar_api:
         st.success(f"Datos obtenidos correctamente: {len(df)} registros")
 
         st.subheader("Estadísticas descriptivas")
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         col1.metric("Promedio", f"{df['valor'].mean():.2f}")
         col2.metric("Valor máximo", f"{df['valor'].max():.2f}")
         col3.metric("Valor mínimo", f"{df['valor'].min():.2f}")
+        col4.metric("Desviación estándar", f"{df['valor'].std():.2f}")
+
 
         st.subheader("Visualización de series temporales")
         tipo_grafico = st.selectbox("Tipo de gráfico", ["Línea", "Barras"])
