@@ -84,4 +84,3 @@ if usar_api:
 st.markdown("---")
 st.markdown("**Autor:** Yoseth Mosquera")
 st.markdown("**Universidad:** Universidad de Antioquia")
-st.markdown("**Asignatura:** Computacion Numerica")
