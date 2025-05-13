@@ -23,7 +23,7 @@ if fecha_inicio > fecha_fin:
     st.stop()
 
 # Opción para conectar a la API
-usar_api = st.sidebar.checkbox("Conectar a API XM", value=False)
+usar_api = st.sidebar.checkbox("Conectar a API", value=False)
 
 # Función para obtener datos de la API XM
 def obtener_datos_desde_api(start_date, end_date):
