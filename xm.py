@@ -66,7 +66,7 @@ if usar_api:
 
         st.subheader("Estadísticas descriptivas")
         col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Promedio", f"{df['Valor'].mean():.2f}")
+        col1.metric("Promedio", f"{df['Valor'].mean():.2f}kWh")
         col2.metric("Máximo", f"{df['Valor'].max():.2f}")
         col3.metric("Mínimo", f"{df['Valor'].min():.2f}")
         col4.metric("Desviación", f"{df['Valor'].std():.2f}")
