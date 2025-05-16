@@ -66,11 +66,11 @@ if usar_api:
 
         st.subheader("Estadísticas descriptivas")
         col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Promedio", f"{df['Valor'].mean():.2f} kWh")
-        col2.metric("Máximo", f"{df['Valor'].max():.2f} kWh")
-        col3.metric("Mínimo", f"{df['Valor'].min():.2f} kWh")
-        col4.metric("Desviación", f"{df['Valor'].std():.2f}")
-        col5.metric("Mediana", f"{df['Valor'].median():.2f}")
+        col1.metric("Promedio", f"{df['Valor'].mean():.2f} COP")
+        col2.metric("Máximo", f"{df['Valor'].max():.2f} COP")
+        col3.metric("Mínimo", f"{df['Valor'].min():.2f} COP")
+        col4.metric("Desviación", f"{df['Valor'].std():.2f} COP")
+        col5.metric("Mediana", f"{df['Valor'].median():.2f} COP")
 
         st.subheader("Visualización")
         tipo = st.selectbox("Tipo de gráfico", ["Línea", "Barras", "Boxplot"])
