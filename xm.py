@@ -93,14 +93,15 @@ if usar_api:
             st.download_button("Descargar gráfico (PNG)", buf, "barras.png", "image/png")
 
         else:
-            plt.figure(figsize=(10, 6))
-            sns.boxplot(x=df["Valor"], marker='o', color='red', markersize=8)
+            flierprops = dict(marker='o', markerfacecolor='red', markersize=8, linestyle='none')
+            sns.boxplot(x=df["Valor"], flierprops=flierprops)
             plt.title("Boxplot de Precios")
-            st.pyplot(plt)
+            plt.xlabel("Valor")
+            st.pyplot(plt.gcf())
             buf = io.BytesIO()
             plt.savefig(buf, format="png")
             buf.seek(0)
-            st.download_button("Descargar boxplot (PNG)", buf, "boxplot.png", "image/png")
+            st.download_button("Descargar boxplot (PNG)", buf, "boxplot.png", "image/png")  
 
 st.markdown("---")
 st.markdown("**Autor:** Yoseth Mosquera")
