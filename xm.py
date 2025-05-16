@@ -94,7 +94,7 @@ if usar_api:
 
         else:
             plt.figure(figsize=(10, 6))
-            sns.boxplot(x=df["Valor"])
+            sns.boxplot(x=df["Valor"], flierprops=dict(marker='o', color='red', markersize=8))
             plt.title("Boxplot de Precios")
             st.pyplot(plt)
             buf = io.BytesIO()
