@@ -6,7 +6,7 @@ import seaborn as sns
 import io
 
 # Configuración inicial
-st.set_page_config(page_title="Precios XM", layout="wide", page_icon="⚡")
+st.set_page_config(page_title="Precios XM", layout="wide")
 st.title("Consulta de Precios XM")
 
 # Panel lateral
