@@ -91,7 +91,7 @@ def gif(df):
 
 
     gif_buf = io.BytesIO()
-    imageio.mimsave(gif_buf, imgs, format="GIF", duration=1, loop=0) 
+    imageio.mimsave(gif_buf, imgs, format="GIF", duration=1000, loop=0) 
     gif_buf.seek(0)
     gif_buf.name = "grafico_precios_mes.gif"
     return gif_buf
