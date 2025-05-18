@@ -66,12 +66,15 @@ def gif(df):
         ax.plot(data["Fecha"], data["Valor"], color="black", marker="o", markersize=4,
                 markerfacecolor="blue", linewidth=1.5, label="Datos")
 
-        ax.axhline(data["Valor"].mean(), color="blue", linestyle='-', linewidth=1, label="Promedio")
+        
+        ax.axhline(data["Valor"].mean(), color="purple", linestyle='-', linewidth=1, label="Promedio")
         ax.axhline(data["Valor"].max(), color="red", linestyle='--', linewidth=1, label="Máximo")
-        ax.axhline(data["Valor"].min(), color="green", linestyle='--', linewidth=1, label="Mínimo")
-
+        ax.axhline(data["Valor"].min(), color="blue", linestyle='--', linewidth=1, label="Mínimo")
+        
         ax.plot(data["Fecha"], data["Valor"].rolling(5, min_periods=1).mean(),
-                linestyle="--", color="orange", linewidth=2, label="Tendencia")
+                linestyle="--", color="black", linewidth=2, label="Tendencia")
+
+
 
         ax.set_title(f"Precio Energía - {mes_txt}")
         ax.set_xlabel("Fecha")
@@ -88,7 +91,7 @@ def gif(df):
 
 
     gif_buf = io.BytesIO()
-    imageio.mimsave(gif_buf, imgs, format="GIF", duration=500, loop=0)  # duration controla la velocidad
+    imageio.mimsave(gif_buf, imgs, format="GIF", duration=1, loop=0) 
     gif_buf.seek(0)
     gif_buf.name = "grafico_precios_mes.gif"
     return gif_buf
