@@ -1,5 +1,6 @@
-streamlit>=1.0
-pandas>=1.0
-requests>=2.0
-matplotlib>=3.0
-seaborn>=0.11
+streamlit>=1.24.1
+pandas>=2.0.3
+requests>=2.31.0
+matplotlib>=3.7.1
+seaborn>=0.12.2
+imageio>=2.25.1
