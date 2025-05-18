@@ -4,6 +4,8 @@ import requests
 import matplotlib.pyplot as plt
 import seaborn as sns
 import io
+import imageio
+from datetime import datetime
 
 # Configuración inicial
 st.set_page_config(page_title="Precios XM", layout="wide")
@@ -50,6 +52,46 @@ def obtener_datos_por_rango(f_ini, f_fin):
         return pd.concat(dfs).sort_values("Fecha").reset_index(drop=True)
     else:
         return pd.DataFrame()
+
+# Función para generar el GIF
+def gif(df):
+    df["Mes"] = df["Fecha"].dt.to_period("M")
+    imgs = []
+
+    for mes in df["Mes"].unique():
+        data = df[df["Mes"] == mes]
+        mes_txt = datetime.strptime(str(mes), "%Y-%m").strftime("%B %Y")
+
+        fig, ax = plt.subplots(figsize=(12, 6))
+        ax.plot(data["Fecha"], data["Valor"], color="black", marker="o", markersize=4,
+                markerfacecolor="blue", linewidth=1.5, label="Datos")
+
+        ax.axhline(data["Valor"].mean(), color="blue", linestyle='-', linewidth=1, label="Promedio")
+        ax.axhline(data["Valor"].max(), color="red", linestyle='--', linewidth=1, label="Máximo")
+        ax.axhline(data["Valor"].min(), color="green", linestyle='--', linewidth=1, label="Mínimo")
+
+        ax.plot(data["Fecha"], data["Valor"].rolling(5, min_periods=1).mean(),
+                linestyle="--", color="orange", linewidth=2, label="Tendencia")
+
+        ax.set_title(f"Precio Energía - {mes_txt}")
+        ax.set_xlabel("Fecha")
+        ax.set_ylabel("Precio (COP/kWh)")
+        ax.legend()
+        ax.grid(True)
+        fig.tight_layout()
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png")
+        buf.seek(0)
+        plt.close(fig)
+        imgs.append(imageio.imread(buf))
+
+
+    gif_buf = io.BytesIO()
+    imageio.mimsave(gif_buf, imgs, format="GIF", duration=500, loop=0)  # duration controla la velocidad
+    gif_buf.seek(0)
+    gif_buf.name = "grafico_precios_mes.gif"
+    return gif_buf
 
 # Lógica principal
 if usar_api:
@@ -101,12 +143,17 @@ if usar_api:
             buf = io.BytesIO()
             plt.savefig(buf, format="png")
             buf.seek(0)
-            st.download_button("Descargar boxplot (PNG)", buf, "boxplot.png", "image/png")  
+            st.download_button("Descargar boxplot (PNG)", buf, "boxplot.png", "image/png")
+
+        # GIF
+        st.markdown("---")
+        st.subheader("GIF de Precios Mensuales")
+        gif_img = gif(df.reset_index())
+        st.image(gif_img, caption="Evolución mensual del precio de energía", use_container_width=True)
+        st.download_button("Descargar GIF", gif_img, "precios_mes.gif", "image/gif")
 
 st.markdown("---")
 st.markdown("**Autor:** Yoseth Mosquera")
 st.markdown("**Universidad:** Universidad de Antioquia")
-st.markdown("**Datos:** Datos obtenidos de SIMEM")
-
-
+st.markdown("**Fuente:** Datos obtenidos de SIMEM")
 
