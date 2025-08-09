@@ -3,7 +3,7 @@
 ![Universidad](https://github.com/Emma-Ok/BootcampTalentoTech/blob/main/Escudo-UdeA.svg.png)
 
 📊 Descripción del Proyecto
-Este proyecto presenta un análisis interactivo de los precios del mercado eléctrico colombiano (COP/kWh), desarrollado como proyecto personal por Yoseth Mosquera.
+Este proyecto presenta un análisis interactivo de los precios del mercado eléctrico colombiano (COP/kWh), desarrollado como proyecto personal.
 La aplicación web permite explorar tendencias históricas, patrones temporales y realizar predicciones mediante modelos de Machine Learning, con visualizaciones dinámicas e interactivas.
 
 ✨ Características Principales
