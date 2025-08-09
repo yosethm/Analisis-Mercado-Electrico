@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import requests
@@ -14,22 +15,30 @@ from xgboost import XGBRegressor
 import joblib
 
 # =========================
-# Configuración inicial
+# Configuración inicial de la app
 # =========================
+# Título de la pestaña y layout ancho.
 st.set_page_config(page_title="Precios XM", layout="wide")
+# Título visible y descripción corta.
 st.title("⚡ Análisis del Precio del Mercado Eléctrico Colombiano 📈")
 st.caption("Estudio histórico y predicciones del precio de la energía (COP/kWh) con modelos avanzados de Machine Learning y mucho mas")
 
+# Tema visual por defecto para seaborn
 sns.set_theme(style="whitegrid")
 
 # =========================
-# Sidebar
+# Sidebar (parámetros de usuario)
 # =========================
 st.sidebar.header("Parámetros de consulta")
+# Rango de fechas para consultar los datos en la API
 fecha_inicio = st.sidebar.date_input("Fecha inicial")
 fecha_fin = st.sidebar.date_input("Fecha final")
+# Bandera para activar el consumo de la API
 usar_api = st.sidebar.checkbox("Conectar a API", value=False)
 
+# =========================
+# Estilos CSS y logo (renderizado con Markdown)
+# =========================
 st.markdown("""
 <style>
     :root {
@@ -179,43 +188,54 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
+# Validación de fechas: evita que el usuario ponga inicio > fin
 if fecha_inicio > fecha_fin:
     st.sidebar.error("La fecha inicial no puede ser mayor a la final.")
     st.stop()
 
 # =========================
-# Funciones
+# Funciones auxiliares
 # =========================
-@st.cache_data(show_spinner=True)
+@st.cache_data(show_spinner=True)  # Cachea resultados de la API para no repetir llamadas
 def obtener_datos_por_rango(f_ini, f_fin):
+    # ID del dataset en el backend de SIMEM
     dataset_id = '96D56E'
+    # Normalización: ajusta los días al primer día del mes para recorrer mes a mes
     f_ini = pd.to_datetime(f_ini).replace(day=1)
     f_fin = pd.to_datetime(f_fin).replace(day=1)
-    meses = pd.date_range(f_ini, f_fin, freq='MS')
+    meses = pd.date_range(f_ini, f_fin, freq='MS')  # 'MS' = Month Start
 
     dfs = []
     for fecha in meses:
+        # Determina el inicio y fin de cada mes
         f_inicio_mes = fecha.date()
         f_fin_mes = (fecha + pd.offsets.MonthEnd(0)).date()
+        # Construye la URL con parámetros
         url = f"https://www.simem.co/backend-files/api/PublicData?startDate={f_inicio_mes}&enddate={f_fin_mes}&datasetId={dataset_id}"
 
         try:
+            # Llamada HTTP con timeout de 30s
             r = requests.get(url, timeout=30)
             if r.status_code == 200:
                 payload = r.json()
+                # Extrae registros dentro del JSON anidado
                 datos = payload.get("result", {}).get("records", [])
                 if datos:
                     df_mes = pd.DataFrame(datos)
+                    # Parseo de tipos
                     df_mes["Fecha"] = pd.to_datetime(df_mes["Fecha"])
                     df_mes["Valor"] = pd.to_numeric(df_mes["Valor"], errors="coerce")
+                    # Quita filas sin valor numérico
                     df_mes = df_mes.dropna(subset=["Valor"])
                     dfs.append(df_mes)
             else:
+                # Notifica si la API responde con error HTTP
                 st.error(f"Error en {fecha.strftime('%B %Y')}: Código {r.status_code}")
         except Exception as e:
+            # Captura errores de red/parseo
             st.error(f"Error en {fecha.strftime('%B %Y')}: {e}")
 
+    # Concatena todos los meses y ordena por fecha
     if dfs:
         out = pd.concat(dfs).sort_values("Fecha").reset_index(drop=True)
         return out
@@ -223,26 +243,35 @@ def obtener_datos_por_rango(f_ini, f_fin):
         return pd.DataFrame()
 
 def generar_gif(df):
+    """
+    Genera un GIF animado por mes con:
+    - Serie diaria
+    - Promedio, máximo y mínimo del mes
+    - Media móvil de 5 periodos como 'tendencia'
+    """
     df = df.copy()
-    df["Mes"] = df["Fecha"].dt.to_period("M")
+    df["Mes"] = df["Fecha"].dt.to_period("M")  # Agrupa por periodo mensual (YYYY-MM)
     imgs = []
-    fixed_size = (1200, 600)
+    fixed_size = (1200, 600)  # Tamaño uniforme para el GIF
 
     for mes in df["Mes"].unique():
         data = df[df["Mes"] == mes]
         mes_txt = datetime.strptime(str(mes), "%Y-%m").strftime("%B %Y")
 
+        # Figura por mes
         fig, ax = plt.subplots(figsize=(12, 6))
+        # Serie diaria
         ax.plot(data["Fecha"], data["Valor"], color="black", marker="o", markersize=4,
                 markerfacecolor="blue", linewidth=1.5, label="Datos")
-
+        # Líneas de referencia (promedio, máximo, mínimo)
         ax.axhline(data["Valor"].mean(), color="purple", linestyle='-', linewidth=1, label="Promedio")
         ax.axhline(data["Valor"].max(), color="red", linestyle='--', linewidth=1, label="Máximo")
         ax.axhline(data["Valor"].min(), color="blue", linestyle='--', linewidth=1, label="Mínimo")
-
+        # Media móvil como señal de tendencia
         ax.plot(data["Fecha"], data["Valor"].rolling(5, min_periods=1).mean(),
                 linestyle="--", color="black", linewidth=2, label="Tendencia")
 
+        # Etiquetas y formato de fechas
         ax.set_title(f"Precio Energía - {mes_txt}")
         ax.set_xlabel("Fecha")
         ax.set_ylabel("Precio (COP/kWh)")
@@ -252,6 +281,7 @@ def generar_gif(df):
 
         fig.tight_layout()
 
+        # Convierte la figura a imagen y acumula para el GIF
         buf = io.BytesIO()
         fig.savefig(buf, format="png", bbox_inches="tight", dpi=150)
         buf.seek(0)
@@ -261,6 +291,7 @@ def generar_gif(df):
         img_pil = img_pil.resize(fixed_size)
         imgs.append(img_pil)
 
+    # Ensambla el GIF con duración de 1s por frame
     gif_buf = io.BytesIO()
     imgs[0].save(
         gif_buf,
@@ -275,26 +306,31 @@ def generar_gif(df):
     return gif_buf
 
 # =========================
-# Tab principal
+# Tabs de la interfaz
 # =========================
 tab,tab1,tab2 = st.tabs(["Consulta & Análisis",
                     "Modelo Predictivo",
                     "Graficas"])
 
+# =========================
+# Pestaña 1: Consulta & Análisis
+# =========================
 with tab:
     if usar_api:
+        # Llama a la API según el rango dado
         df = obtener_datos_por_rango(fecha_inicio, fecha_fin)
 
         if not df.empty:
             st.subheader("Datos obtenidos")
             st.dataframe(df)
 
+            # Exportación de CSV para descarga
             csv = df.to_csv(index=False).encode("utf-8")
             st.download_button("Descargar CSV", csv, file_name="precios_xm.csv", mime="text/csv")
 
             st.success(f"Datos obtenidos: {len(df)} registros")
 
-            # KPIs
+            # KPIs básicos descriptivos
             st.subheader("Estadísticas descriptivas")
             col1, col2, col3, col4, col5 = st.columns(5)
             col1.metric("Promedio", f"{df['Valor'].mean():.2f} COP")
@@ -304,7 +340,7 @@ with tab:
             col5.metric("Mediana", f"{df['Valor'].median():.2f} COP")
             
 
-            # GIF mensual
+            # Generación y visualización de GIF mensual
             st.markdown("---")
             st.subheader("GIF de Precios Mensuales")
             gif_img = generar_gif(df)
@@ -312,11 +348,15 @@ with tab:
             st.download_button("Descargar GIF", gif_img, file_name="precios_mes.gif", mime="image/gif")
 
     else:
+        # Mensaje de ayuda si no se activa la API
         st.info("Activa **Conectar a API** para consultar y visualizar los datos.")
         
 
+# =========================
+# Función: Entrenamiento del modelo XGBoost optimizado
+# =========================
 def entrenar_xgb_optimizado(df):
-    # Procesamiento de fechas
+    # --- Ingeniería de características temporales
     df["Fecha"] = pd.to_datetime(df["Fecha"])
     df["year"] = df["Fecha"].dt.year
     df["month"] = df["Fecha"].dt.month
@@ -324,24 +364,27 @@ def entrenar_xgb_optimizado(df):
     df["dayofweek"] = df["Fecha"].dt.dayofweek
     df["dayofyear"] = df["Fecha"].dt.dayofyear
 
-    # Lags y medias móviles
+    # --- Lags y medias móviles para capturar dinámica de series de tiempo
     for lag in [1, 2, 3, 7, 14]:
         df[f"Valor_lag{lag}"] = df["Valor"].shift(lag)
     df["rolling_mean_3"] = df["Valor"].rolling(window=3).mean()
     df["rolling_mean_7"] = df["Valor"].rolling(window=7).mean()
+    # Elimina las filas iniciales con NaN por los lags/rolling
     df = df.dropna()
 
+    # Si hay muy pocos datos, aborta
     if len(df) < 20:
         return None, None, None, None, None
 
-    # One-Hot Encoding
+    # --- Codificación One-Hot de variables categóricas
     cat_features = ["CodigoVariable", "CodigoDuracion", "UnidadMedida"]
     encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
     encoded = encoder.fit_transform(df[cat_features])
     encoded_df = pd.DataFrame(encoded, columns=encoder.get_feature_names_out(cat_features))
+    # Guarda el encoder para usarlo luego en predicción futura
     joblib.dump(encoder, "encoder_xgb.pkl")
 
-    # Features y target
+    # --- Features finales (numéricas + categóricas codificadas) y target
     X = pd.concat([
         df[["year", "month", "day", "dayofweek", "dayofyear",
             "Valor_lag1", "Valor_lag2", "Valor_lag3", "Valor_lag7", "Valor_lag14",
@@ -350,10 +393,10 @@ def entrenar_xgb_optimizado(df):
     ], axis=1)
     y = df["Valor"]
 
-    # Split
+    # --- Split temporal (sin barajar) para respetar el orden de la serie
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
 
-    # GridSearch para optimización
+    # --- Búsqueda de hiperparámetros con GridSearchCV
     xgb_base = XGBRegressor(random_state=42)
     param_grid = {
         "n_estimators": [200, 500],
@@ -365,7 +408,7 @@ def entrenar_xgb_optimizado(df):
     grid = GridSearchCV(
         estimator=xgb_base,
         param_grid=param_grid,
-        scoring="neg_mean_absolute_error",
+        scoring="neg_mean_absolute_error",  # minimiza MAE
         cv=3,
         verbose=0,
         n_jobs=-1
@@ -373,22 +416,23 @@ def entrenar_xgb_optimizado(df):
     grid.fit(X_train, y_train)
     best_model = grid.best_estimator_
 
-    # Predicciones
+    # --- Predicción y métricas en el set de prueba
     y_pred = best_model.predict(X_test)
-
-    # Métricas
     mae = mean_absolute_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
 
-    # Guardar modelo
+    # --- Persistencia del modelo para uso posterior
     joblib.dump(best_model, "modelo_xgb.pkl")
 
     return best_model, mae, r2, y_test, y_pred
 
-
+# =========================
+# Pestaña 2: Modelo Predictivo
+# =========================
 with tab1:
     st.subheader("🤖 Modelo Predictivo")
 
+    # Introducción didáctica al modelo
     st.markdown("""
     **📌 Introducción al Modelo**
     
@@ -409,7 +453,7 @@ with tab1:
     )
     
     if usar_api and not df.empty:
-        # Resumen inicial del dataset
+        # Resumen rápido del dataset cargado
         st.subheader("📊 Resumen de datos actuales")
         col_a, col_b, col_c, col_d = st.columns(4)
         col_a.metric("Filas", len(df))
@@ -417,11 +461,11 @@ with tab1:
         col_c.metric("Máximo", f"{df['Valor'].max():.2f} COP/kWh")
         col_d.metric("Mínimo", f"{df['Valor'].min():.2f} COP/kWh")
 
-        # Guardar estado previo para detectar cambios
+        # Guarda versión anterior del df para detectar cambios
         if "df_anterior" not in st.session_state:
             st.session_state.df_anterior = df.copy()
 
-        # Comparar con datos anteriores
+        # Compara df actual con el anterior para avisar al usuario
         if not st.session_state.df_anterior.equals(df):
             st.info("🔄 El dataset ha cambiado con respecto a la última vista.")
             cambios_filas = len(df) - len(st.session_state.df_anterior)
@@ -430,7 +474,7 @@ with tab1:
             st.write(f"- Cambio en promedio de valor: **{cambios_promedio:+.2f} COP/kWh**")
             st.session_state.df_anterior = df.copy()
 
-        # Elegir horizonte
+        # Selección del horizonte de predicción
         dias_a_predecir = st.number_input(
             "¿Cuántos días quieres predecir?",
             min_value=1,
@@ -439,48 +483,56 @@ with tab1:
             step=1
         )
 
-        # Botón para ejecutar la predicción
+        # Botón para ejecutar entrenamiento + proyección
         # Botón para ejecutar la predicción
         if st.button("🚀 Predecir"):
         
             model, mae, r2, y_test, y_pred = entrenar_xgb_optimizado(df)
         
             if model is not None:
+                # Muestra métricas de desempeño en test
                 col1, col2 = st.columns(2)
                 col1.metric("MAE", f"{mae:.2f} COP/kWh")
                 col2.metric("R²", f"{r2:.4f}")
         
-                # Explicación de métricas
+                # Breve interpretación de métricas
                 st.markdown(f"""
                 **📊 Interpretación de Resultados**  
                 - **MAE:** {mae:.2f} COP/kWh → Error medio absoluto de las predicciones.  
                 - **R²:** {r2:.4f} → Explica el {r2*100:.1f}% de la variabilidad.
                 """)
         
-                # Cargar encoder
+                # Carga del encoder guardado para generar features en línea
                 encoder = joblib.load("encoder_xgb.pkl")
                 cat_features = ["CodigoVariable", "CodigoDuracion", "UnidadMedida"]
         
+                # Copia del último df para ir agregando las predicciones día a día (método autoregresivo)
                 ultimos_datos = df.copy()
                 predicciones_futuras = []
         
                 for i in range(dias_a_predecir):
+                    # Parte de la última fila y avanza 1 día en la columna Fecha
                     nueva_fila = ultimos_datos.iloc[[-1]].copy()
                     nueva_fila["Fecha"] = nueva_fila["Fecha"] + pd.Timedelta(days=1)
+                    # Recalcula variables temporales
                     nueva_fila["year"] = nueva_fila["Fecha"].dt.year
                     nueva_fila["month"] = nueva_fila["Fecha"].dt.month
                     nueva_fila["day"] = nueva_fila["Fecha"].dt.day
                     nueva_fila["dayofweek"] = nueva_fila["Fecha"].dt.dayofweek
                     nueva_fila["dayofyear"] = nueva_fila["Fecha"].dt.dayofyear
         
+                    # Construye lags a partir de la serie extendida
                     for lag in [1, 2, 3, 7, 14]:
                         nueva_fila[f"Valor_lag{lag}"] = ultimos_datos["Valor"].shift(lag).iloc[-1]
+                    # Medias móviles a partir de lo último disponible
                     nueva_fila["rolling_mean_3"] = ultimos_datos["Valor"].rolling(3).mean().iloc[-1]
                     nueva_fila["rolling_mean_7"] = ultimos_datos["Valor"].rolling(7).mean().iloc[-1]
         
+                    # Codifica categóricas con el encoder entrenado
                     encoded_new = encoder.transform(nueva_fila[cat_features])
                     encoded_new_df = pd.DataFrame(encoded_new, columns=encoder.get_feature_names_out(cat_features))
         
+                    # Ensambla el vector de entrada para el modelo
                     X_nuevo = pd.concat([
                         nueva_fila[["year", "month", "day", "dayofweek", "dayofyear",
                                     "Valor_lag1", "Valor_lag2", "Valor_lag3", "Valor_lag7", "Valor_lag14",
@@ -488,30 +540,32 @@ with tab1:
                         encoded_new_df.reset_index(drop=True)
                     ], axis=1)
         
+                    # Predice el valor del día siguiente y lo agrega a la serie
                     y_nuevo = model.predict(X_nuevo)[0]
                     nueva_fila["Valor"] = y_nuevo
         
                     predicciones_futuras.append([nueva_fila["Fecha"].values[0], y_nuevo])
                     ultimos_datos = pd.concat([ultimos_datos, nueva_fila], ignore_index=True)
         
+                # DataFrame con predicciones acumuladas
                 pred_df = pd.DataFrame(predicciones_futuras, columns=["Fecha", "Predicción"])
                 pred_df["Fecha"] = pd.to_datetime(pred_df["Fecha"])
         
-                # Calcular métricas de la predicción
+                # Métricas descriptivas de la predicción futura
                 promedio_pred = pred_df["Predicción"].mean()
                 maximo_pred = pred_df["Predicción"].max()
                 minimo_pred = pred_df["Predicción"].min()
         
-                # Calcular métricas de los datos originales
+                # Métricas de los datos reales (para comparación)
                 promedio_orig = df["Valor"].mean()
                 maximo_orig = df["Valor"].max()
                 minimo_orig = df["Valor"].min()
         
-                # Tendencia y variación
+                # Señal de tendencia y variación porcentual entre el primer y último día predicho
                 tendencia = "⬆️ Al alza" if pred_df["Predicción"].iloc[-1] > pred_df["Predicción"].iloc[0] else "⬇️ A la baja"
                 variacion_pct = ((pred_df["Predicción"].iloc[-1] - pred_df["Predicción"].iloc[0]) / pred_df["Predicción"].iloc[0]) * 100
         
-                # Gráfica mejorada con Seaborn
+                # --- Visualización combinando histórico + predicción
                 st.subheader("📈 Proyección General")
                 hist = df[["Fecha", "Valor"]].rename(columns={"Valor": "Precio"})
                 hist["Serie"] = "Histórico"
@@ -522,10 +576,12 @@ with tab1:
                 pred_start = df["Fecha"].max() + pd.Timedelta(days=1)
                 combi = pd.concat([hist, pred], ignore_index=True)
         
+                # Colores y elementos de guía visual
                 palette = {"Histórico": "#2E86DE", "Predicción": "#E74C3C"}
                 fig, ax = plt.subplots(figsize=(13, 6))
                 ax.axvspan(pred_start, pred["Fecha"].max(), color="#FAD02E", alpha=0.18, label="Periodo de predicción")
                 sns.lineplot(data=combi, x="Fecha", y="Precio", hue="Serie", linewidth=2.2, palette=palette, ax=ax)
+                # Puntos de los primeros 15 días para resaltar el inicio de la proyección
                 sns.scatterplot(data=pred.head(15), x="Fecha", y="Precio", s=45, color="#E74C3C", edgecolor="white", ax=ax)
                 ax.axvline(pred_start, ls="--", color="#7f8c8d", lw=1.5)
                 ax.set_xlabel("Fecha")
@@ -535,7 +591,7 @@ with tab1:
                 plt.tight_layout()
                 st.pyplot(fig)
         
-                # Resumen de la predicción
+                # Resumen comparativo entre predicción y original
                 st.markdown("### 📌 Resumen Estadístico de la Predicción")
                 col1, col2, col3, col4, col5 = st.columns(5)
                 col1.metric("Promedio", f"{promedio_pred:.2f} COP/kWh", f"{(promedio_pred - promedio_orig):+.2f} COP")
@@ -545,7 +601,7 @@ with tab1:
                 col5.metric("Variación %", f"{variacion_pct:.2f}%")
         
         
-                # ── Resumen de la gráfica ──────────────────────────────────────────────────
+                # ── Resumen narrativo de la proyección ───────────────────────────────────
                 inicio_pred = pred["Fecha"].min().date()
                 fin_pred = pred["Fecha"].max()
                 cambio_inmediato = pred["Precio"].iloc[0] - df["Valor"].iloc[-1]
@@ -553,13 +609,13 @@ with tab1:
                 variacion_pct_total = (pred["Precio"].iloc[-1] / pred["Precio"].iloc[0] - 1) * 100
                 pendiente_media = (pred["Precio"].iloc[-1] - pred["Precio"].iloc[0]) / max(1, len(pred))  # COP/día
                 
-                # Promedio histórico (últimos 30 días) vs promedio predicho
+                # Promedio de últimos 30 días reales vs. promedio de la proyección
                 ventana = 30
                 hist_30 = df[df["Fecha"] >= df["Fecha"].max() - pd.Timedelta(days=ventana)]
                 prom_hist_30 = hist_30["Valor"].mean() if not hist_30.empty else float("nan")
                 prom_pred = pred["Precio"].mean()
                 
-                # Máximo y mínimo de la predicción (con fechas)
+                # Detección de máximos y mínimos con sus fechas
                 idx_max = pred["Precio"].idxmax()
                 idx_min = pred["Precio"].idxmin()
                 max_pred_val = pred.loc[idx_max, "Precio"]
@@ -582,7 +638,7 @@ with tab1:
                 )
                 st.markdown("### 📌 Resumen Estadístico de la Predicción")
 
-                # Mostrar métricas
+                # KPIs repetidos (como en el bloque anterior) — se muestran nuevamente según tu estructura original
                 col1, col2, col3, col4, col5 = st.columns(5)
                 col1.metric("Promedio", f"{promedio_pred:.2f} COP/kWh", f"{(promedio_pred - promedio_orig):+.2f} COP")
                 col2.metric("Máximo", f"{maximo_pred:.2f} COP/kWh", f"{(maximo_pred - maximo_orig):+.2f} COP")
@@ -590,9 +646,10 @@ with tab1:
                 col4.metric("Tendencia", tendencia)
                 col5.metric("Variación %", f"{variacion_pct:.2f}%")
                 
-                # Cambio respecto al último valor real
+                # (Aquí termina la sección de cambio respecto al último valor real en tu código)
 
     else:
+        # Si no hay datos (no se activó API), se indica al usuario
         st.info("Activa **Conectar a API** en la pestaña anterior para usar el modelo.")
 # =========================
 # Nueva pestaña: Solo Gráficas con explicación dinámica
@@ -602,7 +659,7 @@ with tab2:
     st.subheader("📊 Visualizaciones clave (sin modelo)")
 
     if usar_api:
-        # Verificar que df existe (lo crea la pestaña 1 al cargar datos)
+        # Verifica que 'df' exista (se crea en la pestaña 1 al cargar datos)
         try:
             df  # noqa: F821
         except NameError:
@@ -611,25 +668,26 @@ with tab2:
             if df.empty:
                 st.info("No hay datos para graficar todavía.")
             else:
+                # Imports locales para ayuda de análisis y numérica
                 import calendar
                 import numpy as np
 
                 # ---- Helpers de explicación dinámica ----
                 def trend_text(series_vals, freq_label):
-                    """Describe tendencia, cambio % y fuerza (R²) de una regresión lineal simple."""
+                    """Describe tendencia simple (pendiente), cambio % y fuerza (R²) de una regresión lineal."""
                     s = pd.Series(series_vals).dropna()
                     if len(s) < 3:
                         return "Serie muy corta para evaluar tendencia."
                     x = np.arange(len(s))
                     coef = np.polyfit(x, s.values, 1)
                     yhat = coef[0]*x + coef[1]
-                    # R²
+                    # Cálculo de R² manual
                     ss_res = np.sum((s.values - yhat)**2)
                     ss_tot = np.sum((s.values - s.mean())**2) if np.sum((s.values - s.mean())**2) != 0 else 0
                     r2 = 0.0 if ss_tot == 0 else 1 - ss_res/ss_tot
                     change_pct = (s.iloc[-1]/s.iloc[0]-1)*100 if s.iloc[0] != 0 else np.nan
                     dir_txt = "al alza 📈" if change_pct > 0 else ("a la baja 📉" if change_pct < 0 else "estable ➖")
-                    # Fuerza
+                    # Clasificación verbal de la fuerza de la señal
                     if r2 >= 0.7: fuerza = "fuerte"
                     elif r2 >= 0.4: fuerza = "moderada"
                     else: fuerza = "débil"
@@ -637,6 +695,7 @@ with tab2:
                             f"({change_pct:+.2f}%). Señal {fuerza} (R²={r2:.2f}).")
 
                 def dist_text(s):
+                    """Resumen de distribución: media, mediana, desviación, rango y sesgo."""
                     s = s.dropna()
                     if s.empty: return "Sin datos para distribución."
                     rango = (s.min(), s.max())
@@ -648,6 +707,7 @@ with tab2:
                             f"Rango [{rango[0]:.2f}, {rango[1]:.2f}]. Distribución {sesgo}.")
 
                 def box_text(df_box):
+                    """Comentario dinámico para boxplot mensual: mes con mayor/menor mediana y mayor IQR."""
                     if df_box.empty: return "Sin datos mensuales suficientes."
                     med = df_box.groupby("Mes")["Valor"].median().sort_values(ascending=False)
                     iqr = df_box.groupby("Mes")["Valor"].apply(lambda x: x.quantile(0.75)-x.quantile(0.25)).sort_values(ascending=False)
@@ -658,6 +718,7 @@ with tab2:
                             f"Mayor variabilidad (IQR) en **{var_mes}**.")
 
                 def heat_text(piv):
+                    """Lee máximos y mínimos del mapa de calor Año-Mes ignorando NaN."""
                     if piv.isna().all().all(): return "Sin datos suficientes para mapa de calor."
                     # localizar máximos y mínimos ignorando NaN
                     max_val = np.nanmax(piv.values)
@@ -671,6 +732,7 @@ with tab2:
                             f"Mínimo promedio: **{min_val:.2f}** en **{m_min} {y_min}**.")
 
                 def pers_text(corr):
+                    """Traduce el coeficiente de correlación lag-1 a una interpretación cualitativa."""
                     if np.isnan(corr): return "No se puede calcular persistencia (datos insuficientes)."
                     if corr >= 0.8: lvl = "muy alta"
                     elif corr >= 0.6: lvl = "alta"
@@ -680,13 +742,13 @@ with tab2:
                     dirr = "positiva" if corr >= 0 else "negativa"
                     return f"Persistencia {lvl} ({dirr}), correlación lag-1 = {corr:.2f}."
 
-                # ---- Preparar datos base ----
+                # ---- Preparar datos base para las gráficas ----
                 df_vis = df.copy()
                 df_vis["Fecha"] = pd.to_datetime(df_vis["Fecha"])
                 df_vis["Valor"] = pd.to_numeric(df_vis["Valor"], errors="coerce")
                 df_vis = df_vis.dropna(subset=["Valor"]).sort_values("Fecha")
 
-                # Selector de frecuencia
+                # Selector de frecuencia de agregación
                 freq = st.radio("Frecuencia de agregación", ["Diaria", "Semanal", "Mensual"], index=0, horizontal=True)
                 freq_map = {"Diaria": "D", "Semanal": "W", "Mensual": "MS"}
                 res = (
@@ -809,10 +871,13 @@ with tab2:
                         f"Último valor real: **{df_vis['Valor'].iloc[-1]:.2f}** COP/kWh."
                     )
     else:
+        # Si no hay conexión a API, se avisa
         st.info("Activa **Conectar a API** para visualizar las gráficas.")
 
 
-
+# =========================
+# Pie de página (footer)
+# =========================
 st.markdown("""
 <style>
 .footer {
@@ -839,4 +904,3 @@ st.markdown("""
     <p>© 2024</p>
 </div>
 """, unsafe_allow_html=True)
-
