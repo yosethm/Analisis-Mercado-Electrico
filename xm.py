@@ -835,7 +835,13 @@ with tab2:
                 df_lag["Valor_lag1"] = df_lag["Valor"].shift(1)
                 df_lag = df_lag.dropna()
                 fig5, ax5 = plt.subplots(figsize=(12, 5))
-                sns.regplot(data=df_lag, x="Valor_lag1", y="Valor", ax=ax5, scatter_kws={"s": 25, "alpha": 0.6})
+                sns.regplot(
+                    data=df_lag,
+                    x="Valor_lag1",
+                    y="Valor",
+                    color="purple",
+                    ax=ax5,
+                    scatter_kws={"s": 25, "alpha": 0.6})
                 ax5.set_xlabel("Precio periodo anterior (COP/kWh)")
                 ax5.set_ylabel("Precio actual (COP/kWh)")
                 ax5.set_title("Relación precio vs. rezago (lag-1)")
@@ -904,3 +910,4 @@ st.markdown("""
     <p>© 2024</p>
 </div>
 """, unsafe_allow_html=True)
+
