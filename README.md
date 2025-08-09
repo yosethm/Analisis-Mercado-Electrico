@@ -20,7 +20,7 @@ Exportación de datos y gráficos
 Animaciones GIF para evolución mensual
 
 🚀 Demostración
-[Enlace)](https://electricalmarketanalysis.streamlit.app/)
+[Link de la pagina interactiva](https://electricalmarketanalysis.streamlit.app/)
 
 📋 Objetivos del Proyecto
 Analizar el comportamiento histórico de los precios de energía en Colombia
@@ -44,8 +44,4 @@ Streamlit para la interfaz web interactiva
 
 Pillow para procesamiento de imágenes y generación de GIFs
 
-💻 Instalación y Ejecución
-Requisitos Previos
-Python 3.12 o superior
 
-pip (gestor de paquetes de Python)
