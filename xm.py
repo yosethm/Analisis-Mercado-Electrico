@@ -71,6 +71,21 @@ st.markdown("""
         transform: translateY(-5px);
     }
 
+    /* Tarjetas compactas para estadísticas descriptivas */
+    .stats-shell { max-width: 1080px; margin: 4px auto 22px auto; padding: 2px 4px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+    .stat-card { position: relative; min-width: 0; padding: 18px 16px 16px; border-radius: 22px; border: 1px solid rgba(67,101,139,.13); background: linear-gradient(145deg, rgba(255,255,255,.98), rgba(246,249,252,.96)); box-shadow: 0 8px 22px rgba(30,61,89,.08); overflow: hidden; transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+    .stat-card::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--highlight-color), var(--secondary-color)); opacity: .9; }
+    .stat-card:hover { transform: translateY(-5px); box-shadow: 0 14px 30px rgba(30,61,89,.14); border-color: rgba(255,110,64,.30); }
+    .stat-label { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; color: #647487; font-size: .88rem; font-weight: 700; letter-spacing: .01em; }
+    .stat-icon { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 9px; background: rgba(78,137,174,.10); font-size: .90rem; }
+    .stat-value { color: var(--text-color); font-size: clamp(1.28rem,1.6vw,1.72rem); font-weight: 800; line-height: 1.1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .stat-unit { margin-left: 4px; color: #7c8998; font-size: .72em; font-weight: 700; }
+    .stat-note { margin-top: 7px; color: #98a3af; font-size: .72rem; line-height: 1.25; }
+    @media (max-width: 1100px) { .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 700px) { .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 460px) { .stats-grid { grid-template-columns: 1fr; } }
+
     [data-testid="stTable"] {
         border-radius: 8px;
         overflow: hidden;
@@ -526,35 +541,27 @@ with tab:
             )
 
             # KPIs básicos descriptivos
-            st.subheader(
-                "Estadísticas descriptivas"
-            )
+            st.subheader("Estadísticas descriptivas")
 
-            col1, col2, col3, col4, col5 = st.columns(5)
+            promedio = df["Valor"].mean()
+            maximo = df["Valor"].max()
+            minimo = df["Valor"].min()
+            desviacion = df["Valor"].std()
+            mediana = df["Valor"].median()
 
-            col1.metric(
-                "Promedio",
-                f"{df['Valor'].mean():.2f} COP"
-            )
-
-            col2.metric(
-                "Máximo",
-                f"{df['Valor'].max():.2f} COP"
-            )
-
-            col3.metric(
-                "Mínimo",
-                f"{df['Valor'].min():.2f} COP"
-            )
-
-            col4.metric(
-                "Desviación",
-                f"{df['Valor'].std():.2f} COP"
-            )
-
-            col5.metric(
-                "Mediana",
-                f"{df['Valor'].median():.2f} COP"
+            st.markdown(
+                f"""
+                <div class="stats-shell">
+                    <div class="stats-grid">
+                        <div class="stat-card" title="Precio promedio del periodo consultado"><div class="stat-label"><span class="stat-icon">◉</span>Promedio</div><div class="stat-value">{promedio:.2f}<span class="stat-unit">COP</span></div><div class="stat-note">Media del periodo</div></div>
+                        <div class="stat-card" title="Precio máximo registrado en el periodo"><div class="stat-label"><span class="stat-icon">↗</span>Máximo</div><div class="stat-value">{maximo:.2f}<span class="stat-unit">COP</span></div><div class="stat-note">Mayor valor observado</div></div>
+                        <div class="stat-card" title="Precio mínimo registrado en el periodo"><div class="stat-label"><span class="stat-icon">↘</span>Mínimo</div><div class="stat-value">{minimo:.2f}<span class="stat-unit">COP</span></div><div class="stat-note">Menor valor observado</div></div>
+                        <div class="stat-card" title="Dispersión de los precios respecto al promedio"><div class="stat-label"><span class="stat-icon">σ</span>Desviación</div><div class="stat-value">{desviacion:.2f}<span class="stat-unit">COP</span></div><div class="stat-note">Variabilidad del periodo</div></div>
+                        <div class="stat-card" title="Valor central de la distribución ordenada"><div class="stat-label"><span class="stat-icon">◆</span>Mediana</div><div class="stat-value">{mediana:.2f}<span class="stat-unit">COP</span></div><div class="stat-note">Punto medio de los datos</div></div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
 
             # Generación y visualización de GIF mensual
