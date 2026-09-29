@@ -1,2376 +1,2460 @@
-import io
-import calendar
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timedelta
-
-import matplotlib.dates as mdates
-import matplotlib.pyplot as plt
-import numpy as np
+import streamlit as st
 import pandas as pd
 import requests
-import streamlit as st
+import matplotlib.pyplot as plt
+import seaborn as sns
+import io
 from PIL import Image
+from datetime import datetime
+import matplotlib.dates as mdates
 
 
-# =========================================================
-# CONFIGURACIÓN GENERAL
-# =========================================================
+# =========================
+# Configuración inicial de la app
+# =========================
+
 st.set_page_config(
-    page_title="Precios XM | Mercado Eléctrico Colombiano",
-    page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    page_title="Precios XM",
+    layout="wide"
 )
 
-API_URL = "https://www.simem.co/backend-files/api/PublicData"
-DATASET_ID = "96D56E"
-REQUEST_TIMEOUT = 20
-MAX_WORKERS = 6
-
-
-# =========================================================
-# CSS — DISEÑO MODERNO, LIMPIO Y LIGERO
-# =========================================================
-st.markdown(
-    """
-    <style>
-        :root {
-            --bg: #f6f8fc;
-            --surface: #ffffff;
-            --surface-soft: #eef4fb;
-            --primary: #123b63;
-            --primary-2: #1f5f93;
-            --accent: #f59e0b;
-            --text: #172033;
-            --muted: #667085;
-            --border: #dce5ef;
-            --success: #157347;
-            --radius: 16px;
-            --shadow: 0 8px 24px rgba(18, 59, 99, 0.08);
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
-
-        .stApp {
-            background:
-                radial-gradient(
-                    circle at 100% 0%,
-                    rgba(31,95,147,.08),
-                    transparent 28%
-                ),
-                radial-gradient(
-                    circle at 0% 20%,
-                    rgba(245,158,11,.05),
-                    transparent 24%
-                ),
-                var(--bg);
-
-            color: var(--text);
-        }
-
-        [data-testid="stAppViewContainer"] > .main .block-container {
-            max-width: 1500px;
-            padding-top: 1.4rem;
-            padding-bottom: 2.5rem;
-        }
-
-        [data-testid="stSidebar"] {
-            background: linear-gradient(
-                180deg,
-                #0f2f4d 0%,
-                #123b63 100%
-            );
-
-            border-right: 1px solid rgba(255,255,255,.08);
-        }
-
-        [data-testid="stSidebar"] * {
-            color: #f8fbff;
-        }
-
-        [data-testid="stSidebar"] input,
-        [data-testid="stSidebar"] [data-baseweb="input"],
-        [data-testid="stSidebar"] [data-baseweb="select"] {
-            color: var(--text) !important;
-        }
-
-        .hero {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 24px;
-
-            padding: 24px 26px;
-            margin-bottom: 18px;
-
-            border: 1px solid var(--border);
-            border-radius: 22px;
-
-            background: linear-gradient(
-                135deg,
-                rgba(255,255,255,.98),
-                rgba(238,244,251,.96)
-            );
-
-            box-shadow: var(--shadow);
-        }
-
-        .hero-copy h1 {
-            margin: 0 0 8px 0;
-            color: var(--primary);
-
-            font-size: clamp(
-                1.8rem,
-                3vw,
-                2.75rem
-            );
-
-            line-height: 1.08;
-            letter-spacing: -0.035em;
-        }
-
-        .hero-copy p {
-            margin: 0;
-            color: var(--muted);
-
-            font-size: 1rem;
-            max-width: 850px;
-        }
-
-        .hero-logo {
-            flex: 0 0 auto;
-
-            background: #fff;
-
-            padding: 10px 14px;
-
-            border: 1px solid var(--border);
-            border-radius: 14px;
-        }
-
-        .hero-logo img {
-            width: 76px;
-            height: 76px;
-
-            object-fit: contain;
-            display: block;
-        }
-
-        h2,
-        h3 {
-            color: var(--primary);
-            letter-spacing: -0.02em;
-        }
-
-        [data-testid="stMetric"] {
-            background: rgba(255,255,255,.94);
-
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-
-            padding: 14px 16px;
-
-            box-shadow:
-                0 4px 16px
-                rgba(18,59,99,.06);
-        }
-
-        [data-testid="stMetricLabel"] {
-            color: var(--muted);
-            font-weight: 650;
-        }
-
-        [data-testid="stMetricValue"] {
-            color: var(--primary);
-            font-weight: 800;
-        }
-
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 8px;
-            padding: 6px;
-
-            background:
-                rgba(255,255,255,.86);
-
-            border:
-                1px solid
-                var(--border);
-
-            border-radius: 14px;
-
-            box-shadow:
-                0 3px 14px
-                rgba(18,59,99,.05);
-        }
-
-        .stTabs [data-baseweb="tab"] {
-            height: 44px;
-            border-radius: 10px;
-
-            padding: 0 18px;
-
-            color: var(--muted);
-            font-weight: 700;
-        }
-
-        .stTabs [aria-selected="true"] {
-            background:
-                var(--primary)
-                !important;
-
-            color:
-                #fff
-                !important;
-        }
-
-        .stButton > button,
-        .stDownloadButton > button {
-            min-height: 42px;
-
-            border:
-                1px solid
-                var(--primary-2);
-
-            border-radius: 11px;
-
-            background:
-                var(--primary);
-
-            color: #fff;
-
-            font-weight: 750;
-
-            transition:
-                transform .12s ease,
-                box-shadow .12s ease,
-                background .12s ease;
-        }
-
-        .stButton > button:hover,
-        .stDownloadButton > button:hover {
-            transform:
-                translateY(-1px);
-
-            background:
-                var(--primary-2);
-
-            color: #fff;
-
-            box-shadow:
-                0 7px 18px
-                rgba(18,59,99,.16);
-        }
-
-        [data-testid="stDataFrame"] {
-            border:
-                1px solid
-                var(--border);
-
-            border-radius:
-                var(--radius);
-
-            overflow:
-                hidden;
-
-            box-shadow:
-                0 4px 18px
-                rgba(18,59,99,.05);
-        }
-
-        [data-testid="stAlert"] {
-            border-radius:
-                12px;
-
-            border:
-                1px solid
-                var(--border);
-        }
-
-        hr {
-            border: none;
-
-            border-top:
-                1px solid
-                var(--border);
-
-            margin:
-                1.6rem 0;
-        }
-
-        .analysis-card {
-            background:
-                rgba(255,255,255,.95);
-
-            border:
-                1px solid
-                var(--border);
-
-            border-radius:
-                var(--radius);
-
-            padding:
-                16px 18px;
-
-            box-shadow:
-                0 4px 16px
-                rgba(18,59,99,.05);
-
-            margin-top:
-                10px;
-        }
-
-        .analysis-card b {
-            color:
-                var(--primary);
-        }
-
-        .footer {
-            margin-top:
-                34px;
-
-            padding:
-                20px;
-
-            border-radius:
-                18px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #0f2f4d,
-                    #1f5f93
-                );
-
-            color:
-                #fff;
-
-            text-align:
-                center;
-
-            box-shadow:
-                var(--shadow);
-        }
-
-        .footer p {
-            margin:
-                4px 0;
-        }
-
-        .footer .muted {
-            color:
-                rgba(
-                    255,
-                    255,
-                    255,
-                    .74
-                );
-
-            font-size:
-                .86rem;
-        }
-
-        @media (max-width: 800px) {
-
-            .hero {
-                align-items:
-                    flex-start;
-
-                padding:
-                    18px;
-            }
-
-            .hero-logo {
-                display:
-                    none;
-            }
-
-            [data-testid="stAppViewContainer"] > .main .block-container {
-                padding-left:
-                    1rem;
-
-                padding-right:
-                    1rem;
-            }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-
-            *,
-            *::before,
-            *::after {
-
-                animation-duration:
-                    .01ms !important;
-
-                transition-duration:
-                    .01ms !important;
-
-                scroll-behavior:
-                    auto !important;
-            }
-        }
-    </style>
-    """,
-    unsafe_allow_html=True,
+st.title(
+    "⚡ Análisis del Precio del Mercado Eléctrico Colombiano 📈"
+)
+
+st.caption(
+    "Estudio histórico del precio de la energía en Colombia, "
+    "estadísticas descriptivas, análisis y visualizaciones."
 )
 
 
-# =========================================================
-# CABECERA
-# =========================================================
-st.markdown(
-    """
-    <div class="hero">
-
-        <div class="hero-copy">
-
-            <h1>
-                ⚡ Análisis del Mercado Eléctrico Colombiano
-            </h1>
-
-            <p>
-                Consulta histórica de precios de energía de SIMEM,
-                estadísticas descriptivas y visualizaciones interactivas.
-            </p>
-
-        </div>
-
-        <div class="hero-logo">
-
-            <a
-                href="https://www.udea.edu.co"
-                target="_blank"
-                rel="noopener noreferrer"
-            >
-
-                <img
-                    src="https://raw.githubusercontent.com/Emma-Ok/BootcampTalentoTech/main/Escudo-UdeA.svg.png"
-                    alt="Universidad de Antioquia"
-                >
-
-            </a>
-
-        </div>
-
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+# Tema visual por defecto para seaborn
+sns.set_theme(style="whitegrid")
 
 
-# =========================================================
-# SIDEBAR
-# =========================================================
-st.sidebar.header(
-    "⚙️ Parámetros de consulta"
-)
+# =========================
+# Sidebar
+# =========================
 
-hoy = date.today()
+st.sidebar.header("Parámetros de consulta")
 
 fecha_inicio = st.sidebar.date_input(
-    "Fecha inicial",
-    value=hoy - timedelta(days=30),
-    max_value=hoy,
+    "Fecha inicial"
 )
 
 fecha_fin = st.sidebar.date_input(
-    "Fecha final",
-    value=hoy,
-    max_value=hoy,
+    "Fecha final"
 )
 
 usar_api = st.sidebar.checkbox(
     "Conectar a API",
-    value=False,
+    value=False
 )
+
+
+# =========================
+# CSS ORIGINAL
+# =========================
+
+st.markdown("""
+<style>
+
+    :root {
+        --primary-color: #4e89ae;
+        --secondary-color: #43658b;
+        --text-color: #1e3d59;
+        --highlight-color: #ff6e40;
+        --background-color: #f5f0e1;
+    }
+
+
+    h1, h2, h3 {
+
+        color: var(--text-color);
+
+        font-weight: 700;
+
+        border-bottom: 2px solid var(--highlight-color);
+
+        padding-bottom: 10px;
+
+        margin-bottom: 20px;
+
+        animation: fadeIn 0.8s ease-in-out;
+    }
+
+
+    [data-testid="stMetric"] {
+
+        background-color: rgba(255, 255, 255, 0.8);
+
+        padding: 15px 10px;
+
+        border-radius: 10px;
+
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+        transition: transform 0.3s ease;
+
+        animation: fadeIn 0.8s ease-in-out;
+    }
+
+
+    [data-testid="stMetric"]:hover {
+
+        transform: translateY(-5px);
+    }
+
+
+    [data-testid="stTable"] {
+
+        border-radius: 8px;
+
+        overflow: hidden;
+
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+        animation: fadeIn 0.8s ease-in-out;
+    }
+
+
+    .stSelectbox,
+    .stSlider,
+    .stNumberInput,
+    .stTextInput {
+
+        background-color: white !important;
+
+        border-radius: 8px !important;
+
+        padding: 10px !important;
+
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05) !important;
+
+        animation: fadeIn 0.8s ease-in-out;
+    }
+
+
+    button[data-baseweb="tab"] {
+
+        font-weight: bold;
+
+        border-radius: 5px 5px 0 0;
+
+        padding: 10px 15px;
+
+        background-color: rgba(255, 255, 255, 0.9);
+
+        transition: all 0.3s;
+    }
+
+
+    button[data-baseweb="tab"][aria-selected="true"] {
+
+        border-bottom: 3px solid var(--highlight-color);
+
+        color: var(--text-color);
+
+        animation: pulse 1.5s infinite;
+    }
+
+
+    .footer {
+
+        background-color: #f0f2f6;
+
+        padding: 10px;
+
+        border-radius: 8px;
+
+        text-align: center;
+
+        margin-top: 30px;
+
+        font-size: 0.8em;
+
+        color: #555;
+    }
+
+
+    .stPlotlyChart {
+
+        background-color: white;
+
+        padding: 10px;
+
+        border-radius: 10px;
+
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+        animation: fadeIn 0.8s ease-in-out;
+    }
+
+
+    .stProgress > div > div > div > div {
+
+        background-color: var(--highlight-color);
+    }
+
+
+    [title]:hover::after {
+
+        content: attr(title);
+
+        background: #444;
+
+        color: #fff;
+
+        padding: 6px 8px;
+
+        border-radius: 4px;
+
+        position: absolute;
+
+        top: 100%;
+
+        white-space: nowrap;
+
+        z-index: 1000;
+    }
+
+
+    @keyframes fadeIn {
+
+        0% {
+
+            opacity: 0;
+
+            transform: translateY(10px);
+        }
+
+        100% {
+
+            opacity: 1;
+
+            transform: translateY(0);
+        }
+    }
+
+
+    @keyframes pulse {
+
+        0% {
+
+            box-shadow:
+                0 0 0 0
+                rgba(255,110,64,0.7);
+        }
+
+        70% {
+
+            box-shadow:
+                0 0 0 10px
+                rgba(255,110,64,0);
+        }
+
+        100% {
+
+            box-shadow:
+                0 0 0 0
+                rgba(255,110,64,0);
+        }
+    }
+
+
+    /* Logo adaptado */
+
+    .logo-container {
+
+        position: absolute;
+
+        top: 10px;
+
+        right: 15px;
+
+        display: flex;
+
+        gap: 12px;
+
+        z-index: 1000;
+
+        background: rgba(255,255,255,0.9);
+
+        padding: 4px 8px;
+
+        border-radius: 8px;
+
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+
+    .logo-container img {
+
+        height: 54px;
+
+        max-width: 100%;
+
+        opacity: 0.9;
+
+        transition:
+            transform 0.3s ease-in-out,
+            opacity 0.3s ease-in-out;
+    }
+
+
+    .logo-container img:hover {
+
+        transform: scale(1.08);
+
+        opacity: 1;
+    }
+
+
+    @media (max-width: 768px) {
+
+        .logo-container {
+
+            top: 5px;
+
+            right: 5px;
+
+            gap: 6px;
+
+            padding: 2px 6px;
+        }
+
+
+        .logo-container img {
+
+            height: 42px;
+        }
+    }
+
+</style>
+
+
+<div class="logo-container">
+
+    <a
+        href="https://www.udea.edu.co"
+        target="_blank"
+    >
+
+        <img
+            src="https://raw.githubusercontent.com/Emma-Ok/BootcampTalentoTech/main/Escudo-UdeA.svg.png"
+            alt="Escudo UdeA"
+        >
+
+    </a>
+
+</div>
+
+""", unsafe_allow_html=True)
+
+
+# =========================
+# Validación de fechas
+# =========================
 
 if fecha_inicio > fecha_fin:
 
     st.sidebar.error(
-        "La fecha inicial no puede ser mayor a la fecha final."
+        "La fecha inicial no puede ser mayor a la final."
     )
 
     st.stop()
 
 
-st.sidebar.caption(
-    """
-    Los datos se consultan desde SIMEM
-    y se almacenan temporalmente en caché
-    para evitar solicitudes repetidas.
-    """
-)
+# =========================
+# Función para obtener datos
+# =========================
 
-
-# =========================================================
-# CONSULTA DE UN MES
-# =========================================================
-def _consultar_mes(
-    fecha_mes: pd.Timestamp
-):
-
-    inicio_mes = fecha_mes.date()
-
-    fin_mes = (
-        fecha_mes
-        + pd.offsets.MonthEnd(0)
-    ).date()
-
-    params = {
-        "startDate": inicio_mes,
-        "enddate": fin_mes,
-        "datasetId": DATASET_ID,
-    }
-
-    try:
-
-        respuesta = requests.get(
-            API_URL,
-            params=params,
-            timeout=REQUEST_TIMEOUT,
-        )
-
-        respuesta.raise_for_status()
-
-        payload = respuesta.json()
-
-        registros = (
-            payload
-            .get(
-                "result",
-                {}
-            )
-            .get(
-                "records",
-                []
-            )
-        )
-
-        return (
-            fecha_mes,
-            registros,
-            None,
-        )
-
-    except (
-        requests.RequestException,
-        ValueError,
-    ) as exc:
-
-        return (
-            fecha_mes,
-            [],
-            str(exc),
-        )
-
-
-# =========================================================
-# CONSULTA COMPLETA
-# =========================================================
-@st.cache_data(
-    ttl=3600,
-    show_spinner=False,
-)
+@st.cache_data(show_spinner=True)
 def obtener_datos_por_rango(
     f_ini,
-    f_fin,
+    f_fin
 ):
 
-    inicio = (
-        pd.Timestamp(f_ini)
-        .normalize()
+    dataset_id = "96D56E"
+
+    # Ajustar al primer día del mes
+    f_ini = (
+        pd.to_datetime(f_ini)
+        .replace(day=1)
     )
 
-    fin = (
-        pd.Timestamp(f_fin)
-        .normalize()
+    f_fin = (
+        pd.to_datetime(f_fin)
+        .replace(day=1)
     )
 
     meses = pd.date_range(
-        inicio.replace(
-            day=1
-        ),
-        fin.replace(
-            day=1
-        ),
-        freq="MS",
+        f_ini,
+        f_fin,
+        freq="MS"
     )
 
-    registros_totales = []
+    dfs = []
 
-    errores = []
 
-    workers = min(
-        MAX_WORKERS,
-        max(
-            1,
-            len(meses)
-        ),
-    )
+    for fecha in meses:
 
-    with ThreadPoolExecutor(
-        max_workers=workers
-    ) as executor:
+        f_inicio_mes = fecha.date()
 
-        futuros = {
-            executor.submit(
-                _consultar_mes,
-                mes,
-            ): mes
+        f_fin_mes = (
+            fecha
+            + pd.offsets.MonthEnd(0)
+        ).date()
 
-            for mes in meses
-        }
 
-        for futuro in as_completed(
-            futuros
-        ):
+        url = (
 
-            mes, registros, error = (
-                futuro.result()
+            "https://www.simem.co/backend-files/api/PublicData"
+
+            f"?startDate={f_inicio_mes}"
+
+            f"&enddate={f_fin_mes}"
+
+            f"&datasetId={dataset_id}"
+        )
+
+
+        try:
+
+            r = requests.get(
+                url,
+                timeout=30
             )
 
-            if error:
 
-                errores.append(
-                    f"{mes.strftime('%Y-%m')}: {error}"
+            if r.status_code == 200:
+
+                payload = r.json()
+
+                datos = (
+                    payload
+                    .get(
+                        "result",
+                        {}
+                    )
+                    .get(
+                        "records",
+                        []
+                    )
                 )
 
-            elif registros:
 
-                registros_totales.extend(
-                    registros
+                if datos:
+
+                    df_mes = pd.DataFrame(
+                        datos
+                    )
+
+
+                    df_mes["Fecha"] = (
+                        pd.to_datetime(
+                            df_mes["Fecha"]
+                        )
+                    )
+
+
+                    df_mes["Valor"] = (
+                        pd.to_numeric(
+                            df_mes["Valor"],
+                            errors="coerce"
+                        )
+                    )
+
+
+                    df_mes = (
+                        df_mes
+                        .dropna(
+                            subset=["Valor"]
+                        )
+                    )
+
+
+                    dfs.append(
+                        df_mes
+                    )
+
+
+            else:
+
+                st.error(
+
+                    f"Error en "
+                    f"{fecha.strftime('%B %Y')}: "
+                    f"Código {r.status_code}"
                 )
 
-    if not registros_totales:
 
-        return (
-            pd.DataFrame(),
-            errores,
+        except Exception as e:
+
+            st.error(
+
+                f"Error en "
+                f"{fecha.strftime('%B %Y')}: "
+                f"{e}"
+            )
+
+
+    if dfs:
+
+        out = (
+
+            pd.concat(dfs)
+
+            .sort_values("Fecha")
+
+            .reset_index(drop=True)
         )
 
-    df = pd.DataFrame.from_records(
-        registros_totales
-    )
-
-    if (
-        "Fecha" not in df.columns
-        or
-        "Valor" not in df.columns
-    ):
-
-        errores.append(
-            """
-            La respuesta de la API
-            no contiene las columnas
-            'Fecha' y 'Valor'.
-            """
-        )
-
-        return (
-            pd.DataFrame(),
-            errores,
-        )
-
-    df["Fecha"] = pd.to_datetime(
-        df["Fecha"],
-        errors="coerce",
-    )
-
-    df["Valor"] = pd.to_numeric(
-        df["Valor"],
-        errors="coerce",
-    )
-
-    df = df.dropna(
-        subset=[
-            "Fecha",
-            "Valor",
-        ]
-    )
-
-    # Filtrar exactamente el rango seleccionado
-    df = df[
-        (
-            df["Fecha"]
-            >= inicio
-        )
-        &
-        (
-            df["Fecha"]
-            < fin
-            + pd.Timedelta(days=1)
-        )
-    ]
-
-    df = (
-        df
-        .drop_duplicates()
-        .sort_values(
-            "Fecha",
-            kind="stable",
-        )
-        .reset_index(
-            drop=True
-        )
-    )
-
-    return (
-        df,
-        errores,
-    )
+        return out
 
 
-# =========================================================
-# PREPARAR DATOS DE VISUALIZACIÓN
-# =========================================================
-@st.cache_data(
-    show_spinner=False
-)
-def preparar_visualizaciones(
-    df: pd.DataFrame
-) -> pd.DataFrame:
-
-    out = df[
-        [
-            "Fecha",
-            "Valor",
-        ]
-    ].copy()
-
-    out["Fecha"] = pd.to_datetime(
-        out["Fecha"],
-        errors="coerce",
-    )
-
-    out["Valor"] = pd.to_numeric(
-        out["Valor"],
-        errors="coerce",
-    )
-
-    out = (
-        out
-        .dropna()
-        .sort_values("Fecha")
-        .reset_index(drop=True)
-    )
-
-    return out
+    return pd.DataFrame()
 
 
-# =========================================================
-# GENERAR GIF
-# =========================================================
-@st.cache_data(
-    show_spinner=False
-)
-def generar_gif_bytes(
-    df: pd.DataFrame
-) -> bytes:
+# =========================
+# Generar GIF mensual
+# =========================
 
-    datos = preparar_visualizaciones(
-        df
-    )
+def generar_gif(df):
 
-    datos["Mes"] = (
-        datos["Fecha"]
+    """
+
+    Genera un GIF animado por mes con:
+
+    - Serie diaria
+    - Promedio
+    - Máximo
+    - Mínimo
+    - Media móvil
+
+    """
+
+    df = df.copy()
+
+
+    df["Mes"] = (
+
+        df["Fecha"]
         .dt
         .to_period("M")
     )
 
-    imagenes = []
 
-    for mes, data in datos.groupby(
-        "Mes",
-        sort=True,
-    ):
+    imgs = []
 
-        fig, ax = plt.subplots(
-            figsize=(
-                11,
-                5.2,
+
+    fixed_size = (
+        1200,
+        600
+    )
+
+
+    for mes in df["Mes"].unique():
+
+        data = (
+            df[
+                df["Mes"] == mes
+            ]
+        )
+
+
+        mes_txt = (
+
+            datetime
+            .strptime(
+                str(mes),
+                "%Y-%m"
+            )
+            .strftime(
+                "%B %Y"
             )
         )
 
+
+        fig, ax = plt.subplots(
+            figsize=(12, 6)
+        )
+
+
+        # Serie principal
         ax.plot(
+
             data["Fecha"],
+
             data["Valor"],
-            linewidth=1.7,
+
+            color="black",
+
             marker="o",
-            markersize=3.5,
-            label="Datos",
+
+            markersize=4,
+
+            markerfacecolor="blue",
+
+            linewidth=1.5,
+
+            label="Datos"
         )
 
+
+        # Promedio
         ax.axhline(
+
             data["Valor"].mean(),
+
+            color="purple",
+
             linestyle="-",
-            linewidth=1.2,
-            label="Promedio",
+
+            linewidth=1,
+
+            label="Promedio"
         )
 
+
+        # Máximo
         ax.axhline(
+
             data["Valor"].max(),
+
+            color="red",
+
             linestyle="--",
+
             linewidth=1,
-            label="Máximo",
+
+            label="Máximo"
         )
 
+
+        # Mínimo
         ax.axhline(
+
             data["Valor"].min(),
+
+            color="blue",
+
             linestyle="--",
+
             linewidth=1,
-            label="Mínimo",
+
+            label="Mínimo"
         )
 
+
+        # Media móvil
         ax.plot(
+
             data["Fecha"],
+
             data["Valor"]
             .rolling(
                 5,
-                min_periods=1,
+                min_periods=1
             )
             .mean(),
 
             linestyle="--",
+
+            color="black",
+
             linewidth=2,
 
-            label="Media móvil",
+            label="Tendencia"
         )
 
+
         ax.set_title(
-            f"Precio de energía — {mes.strftime('%B %Y')}"
+
+            f"Precio Energía - "
+            f"{mes_txt}"
         )
+
 
         ax.set_xlabel(
             "Fecha"
         )
 
+
         ax.set_ylabel(
             "Precio (COP/kWh)"
         )
 
+
+        ax.legend()
+
+
+        ax.grid(
+            True
+        )
+
+
         ax.xaxis.set_major_formatter(
+
             mdates.DateFormatter(
-                "%d %b"
+                "%b %Y"
             )
         )
 
-        ax.grid(
-            alpha=0.22
-        )
-
-        ax.legend(
-            loc="best"
-        )
 
         fig.tight_layout()
 
-        buffer = io.BytesIO()
+
+        # Convertir gráfica en imagen
+        buf = io.BytesIO()
+
 
         fig.savefig(
-            buffer,
+
+            buf,
+
             format="png",
-            dpi=105,
+
             bbox_inches="tight",
+
+            dpi=150
         )
+
+
+        buf.seek(0)
+
 
         plt.close(fig)
 
-        buffer.seek(0)
 
-        with Image.open(
-            buffer
-        ) as imagen:
+        img_pil = (
 
-            imagenes.append(
-                imagen
-                .convert("RGB")
-                .resize(
-                    (
-                        1000,
-                        470,
-                    )
-                )
+            Image
+            .open(buf)
+            .convert("RGB")
+        )
+
+
+        img_pil = (
+
+            img_pil
+            .resize(
+                fixed_size
             )
+        )
 
-    if not imagenes:
 
-        return b""
+        imgs.append(
+            img_pil
+        )
 
-    gif_buffer = io.BytesIO()
 
-    imagenes[0].save(
-        gif_buffer,
+    gif_buf = io.BytesIO()
+
+
+    imgs[0].save(
+
+        gif_buf,
+
         format="GIF",
+
         save_all=True,
-        append_images=imagenes[1:],
-        duration=900,
-        loop=0,
-        optimize=True,
+
+        append_images=imgs[1:],
+
+        duration=1000,
+
+        loop=0
     )
 
-    return gif_buffer.getvalue()
+
+    gif_buf.seek(0)
+
+
+    gif_buf.name = (
+        "grafico_precios_mes.gif"
+    )
+
+
+    return gif_buf
 
 
 # =========================================================
-# ANÁLISIS DE TENDENCIA
+# TABS
 # =========================================================
-def trend_text(
-    series_vals,
-    freq_label,
-):
 
-    s = pd.Series(
-        series_vals
-    ).dropna()
+tab, tab2 = st.tabs(
 
-    if len(s) < 3:
-
-        return (
-            "Serie muy corta para evaluar tendencia."
-        )
-
-    x = np.arange(
-        len(s),
-        dtype=float,
-    )
-
-    pendiente, intercepto = (
-        np.polyfit(
-            x,
-            s.to_numpy(),
-            1,
-        )
-    )
-
-    yhat = (
-        pendiente * x
-        + intercepto
-    )
-
-    ss_res = np.sum(
-        (
-            s.to_numpy()
-            - yhat
-        ) ** 2
-    )
-
-    ss_tot = np.sum(
-        (
-            s.to_numpy()
-            - s.mean()
-        ) ** 2
-    )
-
-    r2 = (
-        0.0
-        if ss_tot == 0
-        else
-        1 - (
-            ss_res
-            /
-            ss_tot
-        )
-    )
-
-    cambio = (
-        np.nan
-        if s.iloc[0] == 0
-        else
-        (
-            s.iloc[-1]
-            /
-            s.iloc[0]
-            - 1
-        ) * 100
-    )
-
-    if np.isnan(
-        cambio
-    ):
-
-        direccion = (
-            "sin cambio porcentual calculable"
-        )
-
-    elif cambio > 0:
-
-        direccion = (
-            "al alza 📈"
-        )
-
-    elif cambio < 0:
-
-        direccion = (
-            "a la baja 📉"
-        )
-
-    else:
-
-        direccion = (
-            "estable ➖"
-        )
-
-    if r2 >= 0.7:
-
-        fuerza = (
-            "fuerte"
-        )
-
-    elif r2 >= 0.4:
-
-        fuerza = (
-            "moderada"
-        )
-
-    else:
-
-        fuerza = (
-            "débil"
-        )
-
-    cambio_txt = (
-        "N/D"
-        if np.isnan(cambio)
-        else
-        f"{cambio:+.2f}%"
-    )
-
-    return (
-        f"Tendencia {direccion} "
-        f"en el periodo {freq_label.lower()} "
-        f"({cambio_txt}). "
-        f"Señal {fuerza} "
-        f"(R²={r2:.2f})."
-    )
-
-
-# =========================================================
-# ANÁLISIS DISTRIBUCIÓN
-# =========================================================
-def dist_text(
-    s
-):
-
-    s = pd.Series(
-        s
-    ).dropna()
-
-    if s.empty:
-
-        return (
-            "Sin datos para distribución."
-        )
-
-    skew = s.skew()
-
-    if abs(skew) < 0.3:
-
-        sesgo = (
-            "aproximadamente simétrica"
-        )
-
-    elif skew > 0:
-
-        sesgo = (
-            "con cola hacia valores altos"
-        )
-
-    else:
-
-        sesgo = (
-            "con cola hacia valores bajos"
-        )
-
-    return (
-        f"Media {s.mean():.2f}, "
-        f"mediana {s.median():.2f}, "
-        f"desviación {s.std():.2f}. "
-        f"Rango [{s.min():.2f}, {s.max():.2f}]. "
-        f"Distribución {sesgo}."
-    )
-
-
-# =========================================================
-# ANÁLISIS BOXPLOT
-# =========================================================
-def box_text(
-    df_box
-):
-
-    if df_box.empty:
-
-        return (
-            "Sin datos mensuales suficientes."
-        )
-
-    med = (
-        df_box
-        .groupby(
-            "Mes",
-            observed=True,
-        )["Valor"]
-        .median()
-        .sort_values(
-            ascending=False
-        )
-    )
-
-    iqr = (
-        df_box
-        .groupby(
-            "Mes",
-            observed=True,
-        )["Valor"]
-        .apply(
-            lambda x:
-            x.quantile(0.75)
-            -
-            x.quantile(0.25)
-        )
-        .sort_values(
-            ascending=False
-        )
-    )
-
-    if (
-        med.empty
-        or
-        iqr.empty
-    ):
-
-        return (
-            "Sin datos mensuales suficientes."
-        )
-
-    return (
-        f"Mes con mediana más alta: "
-        f"**{med.index[0]}**; "
-        f"más baja: "
-        f"**{med.index[-1]}**. "
-        f"Mayor variabilidad intercuartílica: "
-        f"**{iqr.index[0]}**."
-    )
-
-
-# =========================================================
-# ANÁLISIS HEATMAP
-# =========================================================
-def heat_text(
-    piv
-):
-
-    if (
-        piv.empty
-        or
-        piv.isna()
-        .all()
-        .all()
-    ):
-
-        return (
-            "Sin datos suficientes para el mapa de calor."
-        )
-
-    valores = piv.to_numpy(
-        dtype=float
-    )
-
-    max_idx = np.unravel_index(
-        np.nanargmax(
-            valores
-        ),
-        valores.shape,
-    )
-
-    min_idx = np.unravel_index(
-        np.nanargmin(
-            valores
-        ),
-        valores.shape,
-    )
-
-    max_val = valores[
-        max_idx
-    ]
-
-    min_val = valores[
-        min_idx
-    ]
-
-    y_max = piv.index[
-        max_idx[0]
-    ]
-
-    m_max = piv.columns[
-        max_idx[1]
-    ]
-
-    y_min = piv.index[
-        min_idx[0]
-    ]
-
-    m_min = piv.columns[
-        min_idx[1]
-    ]
-
-    return (
-        f"Máximo promedio: "
-        f"**{max_val:.2f}** "
-        f"en **{m_max} {y_max}**. "
-        f"Mínimo promedio: "
-        f"**{min_val:.2f}** "
-        f"en **{m_min} {y_min}**."
-    )
-
-
-# =========================================================
-# ANÁLISIS PERSISTENCIA
-# =========================================================
-def pers_text(
-    corr
-):
-
-    if pd.isna(
-        corr
-    ):
-
-        return (
-            "No se puede calcular persistencia "
-            "con los datos disponibles."
-        )
-
-    abs_corr = abs(
-        corr
-    )
-
-    if abs_corr >= 0.8:
-
-        nivel = (
-            "muy alta"
-        )
-
-    elif abs_corr >= 0.6:
-
-        nivel = (
-            "alta"
-        )
-
-    elif abs_corr >= 0.4:
-
-        nivel = (
-            "moderada"
-        )
-
-    elif abs_corr >= 0.2:
-
-        nivel = (
-            "baja"
-        )
-
-    else:
-
-        nivel = (
-            "muy baja"
-        )
-
-    direccion = (
-        "positiva"
-        if corr >= 0
-        else
-        "negativa"
-    )
-
-    return (
-        f"Persistencia {nivel} "
-        f"({direccion}), "
-        f"correlación lag-1 = "
-        f"{corr:.2f}."
-    )
-
-
-# =========================================================
-# TARJETA DE ANÁLISIS
-# =========================================================
-def mostrar_analisis(
-    texto
-):
-
-    st.markdown(
-        f"""
-        <div class="analysis-card">
-            <b>Análisis:</b>
-            {texto}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-# =========================================================
-# CARGA ÚNICA DE DATOS
-# =========================================================
-df = pd.DataFrame()
-
-errores_api = []
-
-if usar_api:
-
-    with st.spinner(
-        "Consultando SIMEM..."
-    ):
-
-        df, errores_api = (
-            obtener_datos_por_rango(
-                fecha_inicio,
-                fecha_fin,
-            )
-        )
-
-    if errores_api:
-
-        with st.expander(
-            f"⚠️ Detalles de conexión ({len(errores_api)})"
-        ):
-
-            for error in errores_api:
-
-                st.caption(
-                    error
-                )
-
-
-# =========================================================
-# TABS PRINCIPALES
-# =========================================================
-tab_consulta, tab_graficas = st.tabs(
     [
-        "📋 Consulta & Análisis",
-        "📊 Gráficas",
+        "Consulta & Análisis",
+        "Graficas"
     ]
 )
 
 
 # =========================================================
-# TAB 1
+# TAB 1 — CONSULTA Y ANÁLISIS
 # =========================================================
-with tab_consulta:
 
-    if not usar_api:
+with tab:
 
-        st.info(
-            """
-            Activa **Conectar a API**
-            en el panel lateral
-            para consultar datos.
-            """
+
+    if usar_api:
+
+
+        df = obtener_datos_por_rango(
+
+            fecha_inicio,
+
+            fecha_fin
         )
 
-    elif df.empty:
 
-        st.warning(
-            """
-            No se encontraron datos válidos
-            para el rango seleccionado.
-            """
-        )
+        if not df.empty:
 
-    else:
 
-        st.subheader(
-            "Resumen del periodo"
-        )
-
-        col1, col2, col3, col4, col5 = (
-            st.columns(5)
-        )
-
-        col1.metric(
-            "Promedio",
-            f"{df['Valor'].mean():,.2f} COP",
-        )
-
-        col2.metric(
-            "Máximo",
-            f"{df['Valor'].max():,.2f} COP",
-        )
-
-        col3.metric(
-            "Mínimo",
-            f"{df['Valor'].min():,.2f} COP",
-        )
-
-        col4.metric(
-            "Desviación",
-            f"{df['Valor'].std():,.2f} COP",
-        )
-
-        col5.metric(
-            "Mediana",
-            f"{df['Valor'].median():,.2f} COP",
-        )
-
-        st.markdown(
-            "---"
-        )
-
-        st.subheader(
-            "Datos obtenidos"
-        )
-
-        c_info, c_download = (
-            st.columns(
-                [
-                    3,
-                    1,
-                ]
-            )
-        )
-
-        with c_info:
-
-            st.caption(
-                f"{len(df):,} registros · "
-                f"{df['Fecha'].min().date()} "
-                f"a "
-                f"{df['Fecha'].max().date()}"
+            st.subheader(
+                "Datos obtenidos"
             )
 
-        with c_download:
+
+            st.dataframe(
+                df
+            )
+
+
+            # =========================
+            # Descargar CSV
+            # =========================
 
             csv = (
+
                 df
                 .to_csv(
                     index=False
                 )
                 .encode(
-                    "utf-8-sig"
+                    "utf-8"
                 )
             )
+
 
             st.download_button(
-                "⬇️ Descargar CSV",
-                data=csv,
-                file_name=(
-                    f"precios_xm_"
-                    f"{fecha_inicio}_"
-                    f"{fecha_fin}.csv"
-                ),
-                mime="text/csv",
-                use_container_width=True,
+
+                "Descargar CSV",
+
+                csv,
+
+                file_name="precios_xm.csv",
+
+                mime="text/csv"
             )
 
-        st.dataframe(
-            df,
-            use_container_width=True,
-            hide_index=True,
-            height=430,
-        )
 
-        st.markdown(
-            "---"
-        )
+            st.success(
 
-        st.subheader(
-            "GIF mensual"
-        )
-
-        st.caption(
-            """
-            Se genera solo cuando lo solicitas
-            para evitar recalcular imágenes
-            en cada interacción.
-            """
-        )
-
-        if st.button(
-            "🎞️ Generar GIF",
-            use_container_width=False,
-        ):
-
-            with st.spinner(
-                "Generando animación..."
-            ):
-
-                st.session_state[
-                    "gif_xm"
-                ] = generar_gif_bytes(
-                    df
-                )
-
-                st.session_state[
-                    "gif_xm_key"
-                ] = (
-                    str(fecha_inicio),
-                    str(fecha_fin),
-                    len(df),
-                )
-
-        clave_actual = (
-            str(fecha_inicio),
-            str(fecha_fin),
-            len(df),
-        )
-
-        if (
-            st.session_state.get(
-                "gif_xm_key"
+                f"Datos obtenidos: "
+                f"{len(df)} registros"
             )
-            ==
-            clave_actual
 
-            and
 
-            st.session_state.get(
-                "gif_xm"
+            # =========================
+            # Estadísticas descriptivas
+            # =========================
+
+            st.subheader(
+                "Estadísticas descriptivas"
             )
-        ):
 
-            gif_bytes = (
-                st.session_state[
-                    "gif_xm"
-                ]
+
+            col1, col2, col3, col4, col5 = (
+                st.columns(5)
             )
+
+
+            col1.metric(
+
+                "Promedio",
+
+                f"{df['Valor'].mean():.2f} COP"
+            )
+
+
+            col2.metric(
+
+                "Máximo",
+
+                f"{df['Valor'].max():.2f} COP"
+            )
+
+
+            col3.metric(
+
+                "Mínimo",
+
+                f"{df['Valor'].min():.2f} COP"
+            )
+
+
+            col4.metric(
+
+                "Desviación",
+
+                f"{df['Valor'].std():.2f} COP"
+            )
+
+
+            col5.metric(
+
+                "Mediana",
+
+                f"{df['Valor'].median():.2f} COP"
+            )
+
+
+            # =========================
+            # GIF
+            # =========================
+
+            st.markdown(
+                "---"
+            )
+
+
+            st.subheader(
+                "GIF de Precios Mensuales"
+            )
+
+
+            gif_img = generar_gif(
+                df
+            )
+
 
             st.image(
-                gif_bytes,
+
+                gif_img,
+
                 caption=(
                     "Evolución mensual "
                     "del precio de energía"
                 ),
-                use_container_width=True,
+
+                use_container_width=True
             )
 
+
             st.download_button(
-                "⬇️ Descargar GIF",
-                data=gif_bytes,
+
+                "Descargar GIF",
+
+                gif_img,
+
                 file_name="precios_mes.gif",
-                mime="image/gif",
+
+                mime="image/gif"
             )
+
+
+    else:
+
+
+        st.info(
+
+            "Activa **Conectar a API** "
+            "para consultar y visualizar "
+            "los datos."
+        )
 
 
 # =========================================================
 # TAB 2 — GRÁFICAS
 # =========================================================
-with tab_graficas:
 
-    if not usar_api:
+with tab2:
 
-        st.info(
-            """
-            Activa **Conectar a API**
-            para visualizar las gráficas.
-            """
-        )
 
-    elif df.empty:
+    st.subheader(
 
-        st.warning(
-            """
-            No hay datos para graficar
-            en el rango seleccionado.
-            """
-        )
+        "📊 Visualizaciones clave (sin modelo)"
+    )
 
-    else:
 
-        df_vis = (
-            preparar_visualizaciones(
-                df
-            )
-        )
+    if usar_api:
 
-        st.subheader(
-            "Visualizaciones clave"
-        )
 
-        st.caption(
-            """
-            Para mejorar el rendimiento,
-            la aplicación dibuja únicamente
-            la visualización seleccionada.
-            """
-        )
+        try:
 
-        control1, control2 = (
-            st.columns(
-                [
-                    1,
-                    2,
-                ]
-            )
-        )
+            df
 
-        with control1:
 
-            freq = st.radio(
-                "Frecuencia",
-                [
-                    "Diaria",
-                    "Semanal",
-                    "Mensual",
-                ],
-                index=0,
-                horizontal=True,
+        except NameError:
+
+
+            st.warning(
+
+                "Primero ve a "
+                "**Consulta & Análisis**, "
+                "activa **Conectar a API** "
+                "y carga los datos."
             )
 
-        with control2:
 
-            grafica = st.selectbox(
-                "Visualización",
-                [
-                    "1. Serie temporal con media móvil",
-                    "2. Distribución de precios",
-                    "3. Estacionalidad mensual (boxplot)",
-                    "4. Mapa de calor Año vs Mes",
-                    "5. Persistencia (lag-1)",
-                    "6. Top 10 picos y valles",
-                ],
-            )
-
-        freq_map = {
-            "Diaria": "D",
-            "Semanal": "W",
-            "Mensual": "MS",
-        }
-
-        res = (
-            df_vis
-            .set_index(
-                "Fecha"
-            )
-            .resample(
-                freq_map[
-                    freq
-                ]
-            )["Valor"]
-            .mean()
-            .dropna()
-            .rename(
-                "Precio"
-            )
-            .reset_index()
-        )
+        else:
 
 
-        # =================================================
-        # 1. SERIE TEMPORAL
-        # =================================================
-        if grafica.startswith(
-            "1."
-        ):
+            if df.empty:
 
-            if freq == "Diaria":
 
-                win = 7
+                st.info(
 
-            elif freq == "Semanal":
+                    "No hay datos para "
+                    "graficar todavía."
+                )
 
-                win = 4
 
             else:
 
-                win = 3
+
+                import calendar
+
+                import numpy as np
 
 
-            fig, ax = plt.subplots(
-                figsize=(
-                    12,
-                    5,
-                )
-            )
+                # =========================================
+                # Función análisis de tendencia
+                # =========================================
 
-            ax.plot(
-                res["Fecha"],
-                res["Precio"],
-                linewidth=2,
-                label="Serie",
-            )
+                def trend_text(
+                    series_vals,
+                    freq_label
+                ):
 
-            ax.plot(
-                res["Fecha"],
-                res["Precio"]
-                .rolling(
-                    win,
-                    min_periods=1,
-                )
-                .mean(),
+                    """
 
-                linestyle="--",
+                    Describe:
 
-                linewidth=2,
+                    - tendencia
+                    - cambio %
+                    - R²
 
-                label=f"Media móvil ({win})",
-            )
+                    """
 
-            ax.set_title(
-                f"Evolución {freq.lower()} "
-                f"y media móvil"
-            )
+                    s = (
 
-            ax.set_xlabel(
-                "Fecha"
-            )
-
-            ax.set_ylabel(
-                "Precio (COP/kWh)"
-            )
-
-            ax.grid(
-                alpha=0.25
-            )
-
-            ax.legend(
-                loc="upper left"
-            )
-
-            fig.tight_layout()
-
-            st.pyplot(
-                fig,
-                clear_figure=True,
-            )
-
-            mostrar_analisis(
-                trend_text(
-                    res["Precio"],
-                    freq,
-                )
-            )
-
-
-        # =================================================
-        # 2. DISTRIBUCIÓN
-        # =================================================
-        elif grafica.startswith(
-            "2."
-        ):
-
-            fig, ax = plt.subplots(
-                figsize=(
-                    12,
-                    5,
-                )
-            )
-
-            numero_bins = min(
-                30,
-                max(
-                    8,
-                    int(
-                        np.sqrt(
-                            len(res)
+                        pd.Series(
+                            series_vals
                         )
-                    ),
-                ),
-            )
-
-            ax.hist(
-                res["Precio"]
-                .dropna(),
-
-                bins=numero_bins,
-
-                alpha=0.85,
-            )
-
-            ax.axvline(
-                res["Precio"].mean(),
-                linestyle="--",
-                linewidth=1.5,
-                label="Media",
-            )
-
-            ax.axvline(
-                res["Precio"].median(),
-                linestyle=":",
-                linewidth=1.8,
-                label="Mediana",
-            )
-
-            ax.set_title(
-                "Distribución de precios"
-            )
-
-            ax.set_xlabel(
-                "Precio (COP/kWh)"
-            )
-
-            ax.set_ylabel(
-                "Frecuencia"
-            )
-
-            ax.grid(
-                axis="y",
-                alpha=0.22,
-            )
-
-            ax.legend()
-
-            fig.tight_layout()
-
-            st.pyplot(
-                fig,
-                clear_figure=True,
-            )
-
-            mostrar_analisis(
-                dist_text(
-                    res["Precio"]
-                )
-            )
+                        .dropna()
+                    )
 
 
-        # =================================================
-        # 3. BOXPLOT
-        # =================================================
-        elif grafica.startswith(
-            "3."
-        ):
+                    if len(s) < 3:
 
-            df_box = (
-                df_vis.copy()
-            )
+                        return (
+                            "Serie muy corta "
+                            "para evaluar tendencia."
+                        )
 
-            df_box[
-                "MesN"
-            ] = (
-                df_box[
-                    "Fecha"
-                ]
-                .dt
-                .month
-            )
 
-            meses_presentes = (
-                sorted(
-                    df_box[
-                        "MesN"
-                    ]
-                    .dropna()
-                    .unique()
-                    .tolist()
-                )
-            )
+                    x = np.arange(
+                        len(s)
+                    )
 
-            etiquetas = [
-                calendar.month_name[
-                    m
-                ]
 
-                for m
-                in meses_presentes
-            ]
+                    coef = np.polyfit(
 
-            series = [
-                df_box.loc[
-                    df_box[
-                        "MesN"
-                    ]
-                    == m,
-                    "Valor",
-                ]
-                .dropna()
-                .to_numpy()
+                        x,
 
-                for m
-                in meses_presentes
-            ]
+                        s.values,
 
-            fig, ax = plt.subplots(
-                figsize=(
-                    14,
-                    5,
-                )
-            )
+                        1
+                    )
 
-            if series:
 
-                ax.boxplot(
-                    series,
-                    labels=etiquetas,
-                    showfliers=True,
-                )
+                    yhat = (
 
-            ax.set_title(
-                "Distribución de precios por mes"
-            )
+                        coef[0] * x
 
-            ax.set_xlabel(
-                "Mes"
-            )
+                        + coef[1]
+                    )
 
-            ax.set_ylabel(
-                "Precio (COP/kWh)"
-            )
 
-            ax.tick_params(
-                axis="x",
-                rotation=28,
-            )
+                    ss_res = np.sum(
 
-            ax.grid(
-                axis="y",
-                alpha=0.22,
-            )
+                        (
+                            s.values
+                            - yhat
+                        ) ** 2
+                    )
 
-            fig.tight_layout()
 
-            st.pyplot(
-                fig,
-                clear_figure=True,
-            )
+                    suma_total = np.sum(
 
-            df_box[
-                "Mes"
-            ] = (
-                df_box[
-                    "MesN"
-                ]
-                .map(
-                    lambda m:
-                    calendar.month_name[
-                        m
-                    ]
-                )
-            )
+                        (
+                            s.values
+                            - s.mean()
+                        ) ** 2
+                    )
 
-            mostrar_analisis(
-                box_text(
+
+                    ss_tot = (
+
+                        suma_total
+
+                        if suma_total != 0
+
+                        else 0
+                    )
+
+
+                    r2 = (
+
+                        0.0
+
+                        if ss_tot == 0
+
+                        else
+
+                        1
+                        -
+                        ss_res
+                        /
+                        ss_tot
+                    )
+
+
+                    change_pct = (
+
+                        (
+                            s.iloc[-1]
+                            /
+                            s.iloc[0]
+                            -
+                            1
+                        )
+                        *
+                        100
+
+                        if s.iloc[0] != 0
+
+                        else np.nan
+                    )
+
+
+                    if change_pct > 0:
+
+                        dir_txt = (
+                            "al alza 📈"
+                        )
+
+                    elif change_pct < 0:
+
+                        dir_txt = (
+                            "a la baja 📉"
+                        )
+
+                    else:
+
+                        dir_txt = (
+                            "estable ➖"
+                        )
+
+
+                    if r2 >= 0.7:
+
+                        fuerza = (
+                            "fuerte"
+                        )
+
+
+                    elif r2 >= 0.4:
+
+                        fuerza = (
+                            "moderada"
+                        )
+
+
+                    else:
+
+                        fuerza = (
+                            "débil"
+                        )
+
+
+                    return (
+
+                        f"Tendencia "
+                        f"{dir_txt} "
+                        f"en el periodo "
+                        f"{freq_label.lower()} "
+                        f"({change_pct:+.2f}%). "
+
+                        f"Señal "
+                        f"{fuerza} "
+                        f"(R²={r2:.2f})."
+                    )
+
+
+                # =========================================
+                # Distribución
+                # =========================================
+
+                def dist_text(s):
+
+                    s = (
+                        s
+                        .dropna()
+                    )
+
+
+                    if s.empty:
+
+                        return (
+                            "Sin datos "
+                            "para distribución."
+                        )
+
+
+                    rango = (
+
+                        s.min(),
+
+                        s.max()
+                    )
+
+
+                    skew = (
+                        s.skew()
+                    )
+
+
+                    if abs(skew) < 0.3:
+
+                        sesgo = (
+                            "simétrica"
+                        )
+
+
+                    elif skew > 0:
+
+                        sesgo = (
+
+                            "con cola a la derecha "
+                            "(picos altos poco frecuentes)"
+                        )
+
+
+                    else:
+
+                        sesgo = (
+
+                            "con cola a la izquierda "
+                            "(picos bajos poco frecuentes)"
+                        )
+
+
+                    return (
+
+                        f"Media {s.mean():.2f}, "
+
+                        f"mediana "
+                        f"{s.median():.2f}, "
+
+                        f"desviación "
+                        f"{s.std():.2f}. "
+
+                        f"Rango "
+                        f"[{rango[0]:.2f}, "
+                        f"{rango[1]:.2f}]. "
+
+                        f"Distribución "
+                        f"{sesgo}."
+                    )
+
+
+                # =========================================
+                # Boxplot
+                # =========================================
+
+                def box_text(
                     df_box
-                )
-            )
+                ):
 
 
-        # =================================================
-        # 4. MAPA DE CALOR
-        # =================================================
-        elif grafica.startswith(
-            "4."
-        ):
+                    if df_box.empty:
 
-            df_hm = (
-                df_vis.copy()
-            )
+                        return (
 
-            df_hm[
-                "Año"
-            ] = (
-                df_hm[
-                    "Fecha"
-                ]
-                .dt
-                .year
-            )
+                            "Sin datos mensuales "
+                            "suficientes."
+                        )
 
-            df_hm[
-                "MesN"
-            ] = (
-                df_hm[
-                    "Fecha"
-                ]
-                .dt
-                .month
-            )
 
-            piv = (
-                df_hm
-                .pivot_table(
-                    index="Año",
-                    columns="MesN",
-                    values="Valor",
-                    aggfunc="mean",
-                )
-                .reindex(
-                    columns=range(
-                        1,
-                        13,
+                    med = (
+
+                        df_box
+
+                        .groupby(
+                            "Mes"
+                        )["Valor"]
+
+                        .median()
+
+                        .sort_values(
+                            ascending=False
+                        )
                     )
-                )
-            )
 
-            piv.columns = [
-                calendar.month_abbr[
-                    m
-                ]
 
-                for m
-                in piv.columns
-            ]
+                    iqr = (
 
-            fig, ax = plt.subplots(
-                figsize=(
-                    12,
-                    5.5,
-                )
-            )
+                        df_box
 
-            masked = np.ma.masked_invalid(
-                piv.to_numpy(
-                    dtype=float
-                )
-            )
+                        .groupby(
+                            "Mes"
+                        )["Valor"]
 
-            im = ax.imshow(
-                masked,
-                aspect="auto",
-                interpolation="nearest",
-            )
+                        .apply(
 
-            ax.set_title(
-                "Promedio de precios por Año y Mes"
-            )
+                            lambda x:
 
-            ax.set_xlabel(
-                "Mes"
-            )
+                            x.quantile(0.75)
 
-            ax.set_ylabel(
-                "Año"
-            )
+                            -
 
-            ax.set_xticks(
-                np.arange(
-                    len(
-                        piv.columns
+                            x.quantile(0.25)
+                        )
+
+                        .sort_values(
+                            ascending=False
+                        )
                     )
-                ),
 
-                labels=piv.columns,
-            )
 
-            ax.set_yticks(
-                np.arange(
-                    len(
-                        piv.index
+                    top_mes = (
+                        med.index[0]
                     )
-                ),
 
-                labels=piv.index,
-            )
 
-            fig.colorbar(
-                im,
-                ax=ax,
-                label="COP/kWh",
-            )
+                    bot_mes = (
+                        med.index[-1]
+                    )
 
-            fig.tight_layout()
 
-            st.pyplot(
-                fig,
-                clear_figure=True,
-            )
+                    var_mes = (
+                        iqr.index[0]
+                    )
 
-            mostrar_analisis(
-                heat_text(
+
+                    return (
+
+                        f"Mes con mediana "
+                        f"más alta: "
+                        f"**{top_mes}**; "
+
+                        f"más baja: "
+                        f"**{bot_mes}**. "
+
+                        f"Mayor variabilidad "
+                        f"(IQR) en "
+                        f"**{var_mes}**."
+                    )
+
+
+                # =========================================
+                # Heatmap
+                # =========================================
+
+                def heat_text(
                     piv
+                ):
+
+
+                    if (
+                        piv
+                        .isna()
+                        .all()
+                        .all()
+                    ):
+
+                        return (
+
+                            "Sin datos suficientes "
+                            "para mapa de calor."
+                        )
+
+
+                    max_val = (
+                        np.nanmax(
+                            piv.values
+                        )
+                    )
+
+
+                    min_val = (
+                        np.nanmin(
+                            piv.values
+                        )
+                    )
+
+
+                    max_pos = (
+                        np.where(
+                            piv.values
+                            ==
+                            max_val
+                        )
+                    )
+
+
+                    min_pos = (
+                        np.where(
+                            piv.values
+                            ==
+                            min_val
+                        )
+                    )
+
+
+                    y_max = (
+                        piv.index[
+                            max_pos[0][0]
+                        ]
+                    )
+
+
+                    m_max = (
+                        piv.columns[
+                            max_pos[1][0]
+                        ]
+                    )
+
+
+                    y_min = (
+                        piv.index[
+                            min_pos[0][0]
+                        ]
+                    )
+
+
+                    m_min = (
+                        piv.columns[
+                            min_pos[1][0]
+                        ]
+                    )
+
+
+                    return (
+
+                        f"Máximo promedio: "
+                        f"**{max_val:.2f}** "
+
+                        f"en "
+                        f"**{m_max} "
+                        f"{y_max}**. "
+
+                        f"Mínimo promedio: "
+                        f"**{min_val:.2f}** "
+
+                        f"en "
+                        f"**{m_min} "
+                        f"{y_min}**."
+                    )
+
+
+                # =========================================
+                # Persistencia
+                # =========================================
+
+                def pers_text(
+                    corr
+                ):
+
+
+                    if np.isnan(corr):
+
+                        return (
+
+                            "No se puede calcular "
+                            "persistencia "
+                            "(datos insuficientes)."
+                        )
+
+
+                    if corr >= 0.8:
+
+                        lvl = (
+                            "muy alta"
+                        )
+
+
+                    elif corr >= 0.6:
+
+                        lvl = (
+                            "alta"
+                        )
+
+
+                    elif corr >= 0.4:
+
+                        lvl = (
+                            "moderada"
+                        )
+
+
+                    elif corr >= 0.2:
+
+                        lvl = (
+                            "baja"
+                        )
+
+
+                    else:
+
+                        lvl = (
+                            "muy baja"
+                        )
+
+
+                    dirr = (
+
+                        "positiva"
+
+                        if corr >= 0
+
+                        else "negativa"
+                    )
+
+
+                    return (
+
+                        f"Persistencia "
+                        f"{lvl} "
+                        f"({dirr}), "
+
+                        f"correlación "
+                        f"lag-1 = "
+                        f"{corr:.2f}."
+                    )
+
+
+                # =========================================
+                # Preparar datos
+                # =========================================
+
+                df_vis = (
+                    df.copy()
                 )
-            )
 
 
-        # =================================================
-        # 5. PERSISTENCIA
-        # =================================================
-        elif grafica.startswith(
-            "5."
-        ):
+                df_vis["Fecha"] = (
+                    pd.to_datetime(
+                        df_vis["Fecha"]
+                    )
+                )
 
-            df_lag = (
-                df_vis[
+
+                df_vis["Valor"] = (
+                    pd.to_numeric(
+
+                        df_vis["Valor"],
+
+                        errors="coerce"
+                    )
+                )
+
+
+                df_vis = (
+
+                    df_vis
+
+                    .dropna(
+                        subset=["Valor"]
+                    )
+
+                    .sort_values(
+                        "Fecha"
+                    )
+                )
+
+
+                # =========================================
+                # Selector frecuencia
+                # =========================================
+
+                freq = st.radio(
+
+                    "Frecuencia de agregación",
+
                     [
-                        "Valor"
-                    ]
+                        "Diaria",
+                        "Semanal",
+                        "Mensual"
+                    ],
+
+                    index=0,
+
+                    horizontal=True
+                )
+
+
+                freq_map = {
+
+                    "Diaria": "D",
+
+                    "Semanal": "W",
+
+                    "Mensual": "MS"
+                }
+
+
+                res = (
+
+                    df_vis
+
+                    .set_index(
+                        "Fecha"
+                    )
+
+                    .resample(
+                        freq_map[
+                            freq
+                        ]
+                    )["Valor"]
+
+                    .mean()
+
+                    .reset_index()
+
+                    .rename(
+
+                        columns={
+
+                            "Valor":
+                            "Precio"
+                        }
+                    )
+                )
+
+
+                # =========================================
+                # 1. SERIE TEMPORAL
+                # =========================================
+
+                st.markdown(
+
+                    "#### 1) Serie temporal "
+                    "con media móvil"
+                )
+
+
+                win = (
+
+                    7
+
+                    if freq == "Diaria"
+
+                    else (
+
+                        4
+
+                        if freq == "Semanal"
+
+                        else 3
+                    )
+                )
+
+
+                fig1, ax1 = plt.subplots(
+
+                    figsize=(12, 5)
+                )
+
+
+                sns.lineplot(
+
+                    data=res,
+
+                    x="Fecha",
+
+                    y="Precio",
+
+                    linewidth=2,
+
+                    ax=ax1,
+
+                    label="Serie"
+                )
+
+
+                ax1.plot(
+
+                    res["Fecha"],
+
+                    res["Precio"]
+
+                    .rolling(
+
+                        win,
+
+                        min_periods=1
+                    )
+
+                    .mean(),
+
+                    linestyle="--",
+
+                    linewidth=2,
+
+                    label=f"Media móvil ({win})"
+                )
+
+
+                ax1.set_xlabel(
+                    "Fecha"
+                )
+
+
+                ax1.set_ylabel(
+                    "Precio (COP/kWh)"
+                )
+
+
+                ax1.set_title(
+
+                    f"Evolución "
+                    f"{freq.lower()} "
+                    f"y media móvil"
+                )
+
+
+                ax1.legend(
+                    loc="upper left"
+                )
+
+
+                ax1.grid(
+
+                    True,
+
+                    alpha=0.3
+                )
+
+
+                plt.tight_layout()
+
+
+                st.pyplot(
+                    fig1
+                )
+
+
+                st.markdown(
+
+                    f"**Explicación:** "
+                    f"La línea azul es el "
+                    f"precio promedio "
+                    f"{freq.lower()} y la "
+                    f"discontinua suaviza "
+                    f"con una ventana de "
+                    f"{win} periodos.\n\n"
+
+                    f"**Análisis:** "
+                    f"{trend_text(res['Precio'], freq)}"
+                )
+
+
+                # =========================================
+                # 2. DISTRIBUCIÓN
+                # =========================================
+
+                st.markdown(
+
+                    "#### 2) Distribución "
+                    "de precios"
+                )
+
+
+                fig2, ax2 = plt.subplots(
+
+                    figsize=(12, 5)
+                )
+
+
+                sns.histplot(
+
+                    res["Precio"],
+
+                    bins=30,
+
+                    kde=True,
+
+                    ax=ax2
+                )
+
+
+                ax2.set_title(
+
+                    "Distribución de precios"
+                )
+
+
+                ax2.set_xlabel(
+
+                    "Precio (COP/kWh)"
+                )
+
+
+                ax2.set_ylabel(
+
+                    "Frecuencia"
+                )
+
+
+                ax2.grid(
+
+                    True,
+
+                    alpha=0.3
+                )
+
+
+                plt.tight_layout()
+
+
+                st.pyplot(
+                    fig2
+                )
+
+
+                st.markdown(
+
+                    f"**Explicación:** "
+                    f"Histograma con densidad "
+                    f"(KDE) para conocer "
+                    f"rangos típicos.\n\n"
+
+                    f"**Análisis:** "
+                    f"{dist_text(res['Precio'])}"
+                )
+
+
+                # =========================================
+                # 3. BOXPLOT POR MES
+                # =========================================
+
+                st.markdown(
+
+                    "#### 3) Estacionalidad "
+                    "por mes (boxplot)"
+                )
+
+
+                df_box = (
+                    df_vis.copy()
+                )
+
+
+                df_box["MesN"] = (
+
+                    df_box["Fecha"]
+                    .dt
+                    .month
+                )
+
+
+                df_box["Mes"] = (
+
+                    df_box["MesN"]
+
+                    .apply(
+
+                        lambda m:
+
+                        calendar.month_name[
+                            m
+                        ]
+                    )
+                )
+
+
+                order_months = (
+
+                    list(
+                        calendar.month_name
+                    )[1:]
+                )
+
+
+                fig3, ax3 = plt.subplots(
+
+                    figsize=(14, 5)
+                )
+
+
+                sns.boxplot(
+
+                    data=df_box,
+
+                    x="Mes",
+
+                    y="Valor",
+
+                    order=order_months,
+
+                    ax=ax3
+                )
+
+
+                ax3.set_xlabel(
+                    "Mes"
+                )
+
+
+                ax3.set_ylabel(
+
+                    "Precio (COP/kWh)"
+                )
+
+
+                ax3.set_title(
+
+                    "Distribución de "
+                    "precios por mes"
+                )
+
+
+                ax3.tick_params(
+
+                    axis="x",
+
+                    rotation=30
+                )
+
+
+                ax3.grid(
+
+                    True,
+
+                    axis="y",
+
+                    alpha=0.3
+                )
+
+
+                plt.tight_layout()
+
+
+                st.pyplot(
+                    fig3
+                )
+
+
+                st.markdown(
+
+                    f"**Explicación:** "
+                    f"Cada caja resume la "
+                    f"variación mensual "
+                    f"(mediana, cuartiles "
+                    f"y atípicos).\n\n"
+
+                    f"**Análisis:** "
+                    f"{box_text(df_box)}"
+                )
+
+
+                # =========================================
+                # 4. MAPA DE CALOR
+                # =========================================
+
+                st.markdown(
+
+                    "#### 4) Mapa de calor "
+                    "Año vs Mes (promedio)"
+                )
+
+
+                df_hm = (
+                    df_vis.copy()
+                )
+
+
+                df_hm["Año"] = (
+
+                    df_hm["Fecha"]
+                    .dt
+                    .year
+                )
+
+
+                df_hm["MesN"] = (
+
+                    df_hm["Fecha"]
+                    .dt
+                    .month
+                )
+
+
+                piv = (
+
+                    df_hm
+
+                    .pivot_table(
+
+                        index="Año",
+
+                        columns="MesN",
+
+                        values="Valor",
+
+                        aggfunc="mean"
+                    )
+
+                    .reindex(
+
+                        columns=range(
+                            1,
+                            13
+                        )
+                    )
+                )
+
+
+                piv.columns = [
+
+                    calendar.month_abbr[c]
+
+                    for c
+
+                    in piv.columns
                 ]
-                .copy()
-            )
 
-            df_lag[
-                "Valor_lag1"
-            ] = (
-                df_lag[
-                    "Valor"
-                ]
-                .shift(1)
-            )
 
-            df_lag = (
-                df_lag
-                .dropna()
-            )
+                fig4, ax4 = plt.subplots(
 
-            if len(
-                df_lag
-            ) > 1:
+                    figsize=(12, 6)
+                )
+
+
+                sns.heatmap(
+
+                    piv,
+
+                    annot=False,
+
+                    fmt=".1f",
+
+                    linewidths=0.3,
+
+                    ax=ax4
+                )
+
+
+                ax4.set_title(
+
+                    "Promedio de precios "
+                    "por Año y Mes"
+                )
+
+
+                plt.tight_layout()
+
+
+                st.pyplot(
+                    fig4
+                )
+
+
+                st.markdown(
+
+                    f"**Explicación:** "
+                    f"Colores más intensos "
+                    f"indican promedios "
+                    f"más altos.\n\n"
+
+                    f"**Análisis:** "
+                    f"{heat_text(piv)}"
+                )
+
+
+                # =========================================
+                # 5. PERSISTENCIA
+                # =========================================
+
+                st.markdown(
+
+                    "#### 5) Persistencia "
+                    "(Valor vs. Valor anterior)"
+                )
+
+
+                df_lag = (
+                    df_vis.copy()
+                )
+
+
+                df_lag["Valor_lag1"] = (
+
+                    df_lag["Valor"]
+                    .shift(1)
+                )
+
+
+                df_lag = (
+                    df_lag
+                    .dropna()
+                )
+
+
+                fig5, ax5 = plt.subplots(
+
+                    figsize=(12, 5)
+                )
+
+
+                sns.regplot(
+
+                    data=df_lag,
+
+                    x="Valor_lag1",
+
+                    y="Valor",
+
+                    color="purple",
+
+                    ax=ax5,
+
+                    scatter_kws={
+
+                        "s": 25,
+
+                        "alpha": 0.6
+                    }
+                )
+
+
+                ax5.set_xlabel(
+
+                    "Precio periodo anterior "
+                    "(COP/kWh)"
+                )
+
+
+                ax5.set_ylabel(
+
+                    "Precio actual "
+                    "(COP/kWh)"
+                )
+
+
+                ax5.set_title(
+
+                    "Relación precio vs. "
+                    "rezago (lag-1)"
+                )
+
+
+                ax5.grid(
+
+                    True,
+
+                    alpha=0.3
+                )
+
+
+                plt.tight_layout()
+
+
+                st.pyplot(
+                    fig5
+                )
+
 
                 corr = (
+
                     df_lag[
                         "Valor_lag1"
                     ]
+
                     .corr(
                         df_lag[
                             "Valor"
                         ]
                     )
+
+                    if not df_lag.empty
+
+                    else np.nan
                 )
 
-            else:
 
-                corr = np.nan
+                st.markdown(
 
+                    f"**Explicación:** "
+                    f"Compara el precio actual "
+                    f"con el del periodo previo "
+                    f"para medir inercia.\n\n"
 
-            fig, ax = plt.subplots(
-                figsize=(
-                    12,
-                    5,
-                )
-            )
+                    f"**Análisis:** "
 
-            ax.scatter(
-                df_lag[
-                    "Valor_lag1"
-                ],
-
-                df_lag[
-                    "Valor"
-                ],
-
-                s=24,
-
-                alpha=0.55,
-            )
-
-            if len(
-                df_lag
-            ) >= 2:
-
-                coef = np.polyfit(
-                    df_lag[
-                        "Valor_lag1"
-                    ],
-
-                    df_lag[
-                        "Valor"
-                    ],
-
-                    1,
+                    f"{pers_text(float(corr) if pd.notna(corr) else np.nan)}"
                 )
 
-                x_line = np.linspace(
-                    df_lag[
-                        "Valor_lag1"
-                    ]
-                    .min(),
 
-                    df_lag[
-                        "Valor_lag1"
-                    ]
-                    .max(),
+                # =========================================
+                # 6. PICOS Y VALLES
+                # =========================================
 
-                    100,
+                st.markdown(
+
+                    "#### 6) Top 10 picos y "
+                    "valles (últimos 12 meses)"
                 )
 
-                ax.plot(
-                    x_line,
 
-                    (
-                        coef[0]
-                        * x_line
-                        + coef[1]
-                    ),
+                ult_12m = (
 
-                    linewidth=2,
-                )
-
-            ax.set_title(
-                """
-                Relación precio actual
-                vs. periodo anterior
-                """
-            )
-
-            ax.set_xlabel(
-                """
-                Precio periodo anterior
-                (COP/kWh)
-                """
-            )
-
-            ax.set_ylabel(
-                """
-                Precio actual
-                (COP/kWh)
-                """
-            )
-
-            ax.grid(
-                alpha=0.22
-            )
-
-            fig.tight_layout()
-
-            st.pyplot(
-                fig,
-                clear_figure=True,
-            )
-
-            mostrar_analisis(
-                pers_text(
-                    corr
-                )
-            )
-
-
-        # =================================================
-        # 6. TOP Picos y Valles
-        # =================================================
-        else:
-
-            ult_12m = df_vis[
-                df_vis[
-                    "Fecha"
-                ]
-                >=
-                (
                     df_vis[
-                        "Fecha"
+
+                        df_vis["Fecha"]
+
+                        >=
+
+                        (
+                            df_vis["Fecha"]
+                            .max()
+
+                            -
+
+                            pd.Timedelta(
+                                days=365
+                            )
+                        )
                     ]
-                    .max()
-                    -
-                    pd.Timedelta(
-                        days=365
+                )
+
+
+                if ult_12m.empty:
+
+
+                    st.info(
+
+                        "No hay suficientes "
+                        "datos en los últimos "
+                        "12 meses para este "
+                        "resumen."
                     )
-                )
-            ]
 
-            if ult_12m.empty:
 
-                st.info(
-                    """
-                    No hay datos suficientes
-                    en los últimos 12 meses.
-                    """
-                )
+                else:
 
-            else:
 
-                top_max = (
-                    ult_12m
-                    .nlargest(
-                        10,
-                        "Valor",
-                    )[
-                        [
-                            "Fecha",
-                            "Valor",
+                    top_max = (
+
+                        ult_12m
+
+                        .nlargest(
+                            10,
+                            "Valor"
+                        )[
+
+                            [
+                                "Fecha",
+                                "Valor"
+                            ]
                         ]
-                    ]
-                    .rename(
-                        columns={
-                            "Valor":
-                            "Precio"
-                        }
-                    )
-                    .reset_index(
-                        drop=True
-                    )
-                )
 
-                top_min = (
-                    ult_12m
-                    .nsmallest(
-                        10,
-                        "Valor",
-                    )[
-                        [
-                            "Fecha",
-                            "Valor",
+                        .rename(
+
+                            columns={
+
+                                "Valor":
+                                "Precio"
+                            }
+                        )
+                    )
+
+
+                    top_min = (
+
+                        ult_12m
+
+                        .nsmallest(
+                            10,
+                            "Valor"
+                        )[
+
+                            [
+                                "Fecha",
+                                "Valor"
+                            ]
                         ]
-                    ]
-                    .rename(
-                        columns={
-                            "Valor":
-                            "Precio"
-                        }
-                    )
-                    .reset_index(
-                        drop=True
-                    )
-                )
 
-                c1, c2 = (
-                    st.columns(2)
-                )
+                        .rename(
 
-                with c1:
+                            columns={
+
+                                "Valor":
+                                "Precio"
+                            }
+                        )
+                    )
+
+
+                    colm1, colm2 = (
+                        st.columns(2)
+                    )
+
+
+                    with colm1:
+
+
+                        st.write(
+
+                            "**Máximos (Top 10)**"
+                        )
+
+
+                        st.dataframe(
+
+                            top_max
+
+                            .reset_index(
+                                drop=True
+                            )
+                        )
+
+
+                    with colm2:
+
+
+                        st.write(
+
+                            "**Mínimos (Top 10)**"
+                        )
+
+
+                        st.dataframe(
+
+                            top_min
+
+                            .reset_index(
+                                drop=True
+                            )
+                        )
+
+
+                    r = (
+
+                        ult_12m[
+                            "Valor"
+                        ]
+                        .max()
+
+                        -
+
+                        ult_12m[
+                            "Valor"
+                        ]
+                        .min()
+                    )
+
 
                     st.markdown(
-                        "#### 🔺 Máximos"
+
+                        f"**Explicación:** "
+                        f"Listado de los picos "
+                        f"más altos y más bajos "
+                        f"del último año.\n\n"
+
+                        f"**Análisis:** "
+                        f"Amplitud anual ≈ "
+                        f"**{r:.2f}** COP/kWh. "
+
+                        f"Último valor real: "
+                        f"**{df_vis['Valor'].iloc[-1]:.2f}** "
+                        f"COP/kWh."
                     )
 
-                    st.dataframe(
-                        top_max,
-                        use_container_width=True,
-                        hide_index=True,
-                    )
 
-                with c2:
+    else:
 
-                    st.markdown(
-                        "#### 🔻 Mínimos"
-                    )
 
-                    st.dataframe(
-                        top_min,
-                        use_container_width=True,
-                        hide_index=True,
-                    )
+        st.info(
 
-                amplitud = (
-                    ult_12m[
-                        "Valor"
-                    ]
-                    .max()
-                    -
-                    ult_12m[
-                        "Valor"
-                    ]
-                    .min()
-                )
-
-                mostrar_analisis(
-                    f"Amplitud del último año: "
-                    f"**{amplitud:.2f} COP/kWh**. "
-                    f"Último valor disponible: "
-                    f"**{df_vis['Valor'].iloc[-1]:.2f} COP/kWh**."
-                )
+            "Activa **Conectar a API** "
+            "para visualizar las gráficas."
+        )
 
 
 # =========================================================
-# FOOTER
+# FOOTER ORIGINAL
 # =========================================================
-st.markdown(
-    f"""
-    <div class="footer">
 
-        <p>
-            ⚡ <b>Yoseth Mosquera</b>
-            · Universidad de Antioquia
-        </p>
+st.markdown("""
+<style>
 
-        <p>
-            📊 Fuente de datos:
-            <b>SIMEM</b>
-        </p>
+.footer {
 
-        <p class="muted">
-            © {datetime.now().year}
-            · Aplicación optimizada para
-            consulta y visualización
-        </p>
+    position: relative;
 
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+    bottom: 0;
+
+    width: 100%;
+
+    background:
+        linear-gradient(
+            90deg,
+            #4e89ae,
+            #43658b
+        );
+
+    color: white;
+
+    text-align: center;
+
+    padding: 15px 10px;
+
+    border-radius: 8px;
+
+    font-size: 0.9rem;
+
+    box-shadow:
+        0 4px 12px
+        rgba(0,0,0,0.2);
+}
+
+
+.footer p {
+
+    margin: 4px 0;
+}
+
+</style>
+
+
+<div class="footer">
+
+    <p>
+        ⚡ Autor:
+        <b>Yoseth Mosquera</b>
+    </p>
+
+    <p>
+        🎓 Universidad:
+        <b>Universidad de Antioquia</b>
+    </p>
+
+    <p>
+        📊 Fuente:
+        <b>Datos obtenidos de SIMEM</b>
+    </p>
+
+    <p>
+        © 2024
+    </p>
+
+</div>
+
+""", unsafe_allow_html=True)
