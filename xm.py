@@ -1466,9 +1466,9 @@ st.markdown("""
 </style>
 
 <div class="footer">
-    <p>⚡ Autor: <b>Yoseth Mosquera</b></p>
-    <p>🎓 Universidad: <b>Universidad de Antioquia</b></p>
-    <p>📊 Fuente: <b>Datos obtenidos de SIMEM</b></p>
+    <p>Autor: <b>Yoseth Mosquera</b></p>
+    <p>Universidad: <b>Universidad de Antioquia</b></p>
+    <p>Fuente: <b>Datos obtenidos de SIMEM</b></p>
     <p>© 2024</p>
 </div>
 """, unsafe_allow_html=True)
