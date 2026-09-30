@@ -15,10 +15,10 @@ import matplotlib.dates as mdates
 st.set_page_config(page_title="Precios XM", layout="wide")
 
 # Título visible y descripción corta.
-st.title("⚡ Análisis del Precio del Mercado Eléctrico Colombiano 📈")
+st.title("Análisis del Precio del Mercado Eléctrico Colombiano")
 st.caption(
     "Estudio histórico y predicciones del precio de la energía "
-    "con modelos avanzados de Machine Learning y mucho mas"
+    "y mucho mas"
 )
 
 # Tema visual por defecto para seaborn
