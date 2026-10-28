@@ -40,6 +40,8 @@ Abre `http://localhost:3000`.
 4. Ejecuta `npm run seed:supabase` para importar el CSV.
 5. Elimina la clave de servicio cuando termines. La aplicación web solo necesita la clave pública `anon`.
 
+Alternativa sin terminal: después de ejecutar la migración, abre **Table Editor → electricity_prices → Insert → Import data from CSV** e importa `supabase/seed/electricity_prices.csv`.
+
 La migración activa Row Level Security y permite únicamente lectura pública. La escritura queda reservada al servidor o a la clave de servicio.
 
 ## Desplegar en Vercel
