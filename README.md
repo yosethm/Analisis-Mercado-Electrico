@@ -47,7 +47,8 @@ La migración activa Row Level Security y permite únicamente lectura pública. 
 Vercel detecta Next.js automáticamente. Configura estas variables en **Project Settings → Environment Variables**:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (recomendado actualmente)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` también funciona en proyectos antiguos
 
 Si la integración de Supabase con Vercel ya las creó, no es necesario duplicarlas. El despliegue también funciona sin ellas gracias al CSV de respaldo.
 
