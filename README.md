@@ -2,6 +2,8 @@
 
 Aplicación de análisis del mercado eléctrico colombiano. El repositorio contiene dos implementaciones independientes:
 
+**Aplicación desplegada:** [https://projectt-git-main-yoseths.vercel.app](https://projectt-git-main-yoseths.vercel.app)
+
 - **Streamlit original:** `xm.py`, `requirements.txt` y `.streamlit/` permanecen intactos.
 - **Aplicación Vercel:** Next.js, React y TypeScript dentro de `src/`.
 
