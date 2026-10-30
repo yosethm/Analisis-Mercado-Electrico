@@ -15,6 +15,17 @@ const fullDate = new Intl.DateTimeFormat("es-CO", { day: "numeric", month: "long
 const frequencyLabels: Record<Frequency,string> = { daily: "Diaria", weekly: "Semanal", monthly: "Mensual" };
 type Tab = "overview" | "data" | "analytics";
 
+function inputDate(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,"0")}-${String(value.getDate()).padStart(2,"0")}`;
+}
+
+function defaultDateRange() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setMonth(start.getMonth() - 1);
+  return { start: inputDate(start), end: inputDate(end) };
+}
+
 function Icon({ name }: { name: "bolt"|"calendar"|"download"|"database"|"chart"|"play"|"pause"|"refresh" }) {
   const paths={
     bolt:<path d="M13 2 5 13h6l-1 9 9-12h-6V2Z"/>, calendar:<><path d="M5 3v3m14-3v3M3 9h18M5 5h14a2 2 0 0 1 2 2v13H3V7a2 2 0 0 1 2-2Z"/></>,
@@ -35,9 +46,9 @@ export function MarketWorkspace({ initialPayload }: { initialPayload: MarketPayl
   const [frequency,setFrequency]=useState<Frequency>("daily");
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
-  const dates=useMemo(()=>payload.rows.map(row=>row.date).sort(),[payload.rows]);
-  const [start,setStart]=useState(dates[0]??"");
-  const [end,setEnd]=useState(dates.at(-1)??"");
+  const [dateRange]=useState(defaultDateRange);
+  const [start,setStart]=useState(dateRange.start);
+  const [end,setEnd]=useState(dateRange.end);
   const variables=useMemo(()=>[...new Set(payload.rows.map(row=>row.variable))].filter(Boolean),[payload.rows]);
   const [variable,setVariable]=useState(variables.includes("PPBOGReal")?"PPBOGReal":variables[0]??"");
   const versions=useMemo(()=>[...new Set(payload.rows.filter(row=>row.variable===variable).map(row=>row.version))].filter(Boolean),[payload.rows,variable]);
@@ -91,7 +102,7 @@ export function MarketWorkspace({ initialPayload }: { initialPayload: MarketPayl
 
     <section className="hero" id="top"><div><p className="kicker">INTELIGENCIA ENERGÉTICA · COLOMBIA</p><h1>Entiende el precio.<br/><em>Decide con contexto.</em></h1><p className="hero-copy">Consulta el mercado eléctrico, identifica patrones y exporta análisis claros desde una sola herramienta.</p></div><div className="live-price"><span><i/> ÚLTIMA SEÑAL</span><strong>{money.format(latest)}</strong><small>COP/kWh</small><p className={delta>=0?"positive":"negative"}>{delta>=0?"↑":"↓"} {Math.abs(delta).toFixed(2)}% frente al periodo anterior</p><footer>{series.at(-1)?.date?fullDate.format(new Date(`${series.at(-1)!.date}T12:00:00Z`)):"Sin fecha"}</footer></div></section>
 
-    <section className="query-shell"><div className="query-heading"><span className="query-icon"><Icon name="calendar"/></span><div><b>Consulta de mercado</b><small>Selecciona un rango y actualiza directamente desde SIMEM</small></div></div><div className="query-fields"><label>Desde<input type="date" value={start} onChange={event=>setStart(event.target.value)}/></label><label>Hasta<input type="date" value={end} onChange={event=>setEnd(event.target.value)}/></label><button className="primary-button" disabled={loading} onClick={querySimem}><Icon name="refresh"/>{loading?"Procesando…":"Consultar SIMEM"}</button></div>{error&&<p className="error" role="alert">{error}</p>}</section>
+    <section className="query-shell"><div className="query-heading"><span className="query-icon"><Icon name="calendar"/></span><div><b>Consulta de mercado</b><small>Rango inicial: últimos 30 días · consulta directa a SIMEM</small></div></div><div className="query-fields"><label>Desde<input type="date" value={start} onChange={event=>setStart(event.target.value)}/></label><label>Hasta<input type="date" value={end} onChange={event=>setEnd(event.target.value)}/></label><button className="primary-button" disabled={loading} onClick={querySimem}><Icon name="refresh"/>{loading?"Consultando…":"Consultar SIMEM"}</button></div>{error&&<p className="error" role="alert">{error}</p>}</section>
 
     <section className="workspace">
       <div className="section-heading"><div><span>Fuente: {payload.source}</span><h2>{activeTab==="overview"?"Panorama del mercado":activeTab==="data"?"Explorador de datos":"Analítica descriptiva"}</h2></div><div className="filters"><label>Producto<select value={variable} onChange={event=>setVariable(event.target.value)}>{variables.map(item=><option key={item}>{item}</option>)}</select></label><label>Versión<select value={version} onChange={event=>setVersion(event.target.value)}>{versions.map(item=><option key={item}>{item}</option>)}</select></label></div></div>
